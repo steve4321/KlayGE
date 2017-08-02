@@ -33,6 +33,10 @@
 #include <KlayGE/ResLoader.hpp>
 #include <KFL/XMLDom.hpp>
 #include <KFL/CXX17/filesystem.hpp>
+#include <KlayGE/App3D.hpp>
+#include <KlayGE/RenderFactory.hpp>
+#include <KlayGE/RenderEngine.hpp>
+#include <KlayGE/RenderEffect.hpp>
 
 #include <iostream>
 
@@ -136,55 +140,13 @@ int main(int argc, char* argv[])
 {
 	if (argc < 2)
 	{
-		cout << "Usage: FXMLJIT pc_dx11|pc_dx10|pc_dx9|win_tegra3|pc_gl4|pc_gl3|pc_gl2|android_tegra3|ios xxx.fxml [target folder]" << endl;
+		cout << "Usage: FXMLJIT d3d_12_1|d3d_12_0|d3d_11_1|d3d_11_0|gl_4_6|gl_4_5|gl_4_4|gl_4_3|gl_4_2|gl_4_1|gles_3_2|gles_3_1|gles_3_0 xxx.fxml [target folder]" << endl;
 		return 1;
 	}
 
 	ResLoader::Instance().AddPath("../../Tools/media/PlatformDeployer");
 
 	std::string platform = argv[1];
-
-	if (("pc_dx11" == platform) || ("pc_dx10" == platform) || ("pc_dx9" == platform) || ("win_tegra3" == platform)
-		|| ("pc_gl4" == platform) || ("pc_gl3" == platform) || ("pc_gl2" == platform)
-		|| ("android_tegra3" == platform) || ("ios" == platform))
-	{
-		if ("pc_dx11" == platform)
-		{
-			platform = "d3d_11_0";
-		}
-		else if ("pc_dx10" == platform)
-		{
-			platform = "d3d_10_0";
-		}
-		else if ("pc_dx9" == platform)
-		{
-			platform = "d3d_9_3";
-		}
-		else if ("win_tegra3" == platform)
-		{
-			platform = "d3d_9_1";
-		}
-		else if ("pc_gl4" == platform)
-		{
-			platform = "gl_4_0";
-		}
-		else if ("pc_gl3" == platform)
-		{
-			platform = "gl_3_0";
-		}
-		else if ("pc_gl2" == platform)
-		{
-			platform = "gl_2_0";
-		}
-		else if ("android_tegra3" == platform)
-		{
-			platform = "gles_2_0";
-		}
-		else if ("ios" == platform)
-		{
-			platform = "gles_2_0";
-		}
-	}
 
 	boost::algorithm::to_lower(platform);
 
@@ -194,7 +156,56 @@ int main(int argc, char* argv[])
 		target_folder = argv[3];
 	}
 
+	Context::Instance().LoadCfg("KlayGE.cfg");
+	ContextCfg context_cfg = Context::Instance().Config();
+	context_cfg.render_factory_name = "NullRender";
+	context_cfg.graphics_cfg.hide_win = true;
+	context_cfg.graphics_cfg.hdr = false;
+	context_cfg.graphics_cfg.ppaa = false;
+	context_cfg.graphics_cfg.gamma = false;
+	context_cfg.graphics_cfg.color_grading = false;
+	Context::Instance().Config(context_cfg);
+
 	Offline::OfflineRenderDeviceCaps caps = LoadPlatformConfig(platform);
+
+	// We only care about some fields
+	RenderDeviceCaps device_caps{};
+
+	device_caps.max_shader_model = caps.max_shader_model;
+
+	device_caps.max_texture_depth = caps.max_texture_depth;
+	device_caps.max_texture_array_length = caps.max_texture_array_length;
+	device_caps.max_pixel_texture_units = caps.max_pixel_texture_units;
+	device_caps.max_simultaneous_rts = caps.max_simultaneous_rts;
+
+	device_caps.fp_color_support = caps.fp_color_support;
+	device_caps.pack_to_rgba_required = caps.pack_to_rgba_required;
+	device_caps.render_to_texture_array_support = caps.render_to_texture_array_support;
+
+	device_caps.gs_support = caps.gs_support;
+	device_caps.cs_support = caps.cs_support;
+	device_caps.hs_support = caps.hs_support;
+	device_caps.ds_support = caps.ds_support;
+
+	std::vector<ElementFormat> texture_format;
+	if (caps.bc4_support)
+	{
+		texture_format.push_back(EF_BC4);
+	}
+	if (caps.bc5_support)
+	{
+		texture_format.push_back(EF_BC5);
+	}
+	//TODO: frag_depth_support
+
+	RenderEngine& re = Context::Instance().RenderFactoryInstance().RenderEngineInstance();
+	re.SetCustomAttrib("PLATFORM", &caps.platform);
+	re.SetCustomAttrib("MAJOR_VERSION", &caps.major_version);
+	re.SetCustomAttrib("MINOR_VERSION", &caps.minor_version);
+	re.SetCustomAttrib("NATIVE_SHADER_FOURCC", &caps.native_shader_fourcc);
+	re.SetCustomAttrib("NATIVE_SHADER_VERSION", &caps.native_shader_version);
+	re.SetCustomAttrib("TEXTURE_FORMAT", &texture_format);
+	re.SetCustomAttrib("DEVICE_CAPS", &device_caps);
 
 	std::string fxml_name(argv[2]);
 	filesystem::path fxml_path(fxml_name);
@@ -230,7 +241,7 @@ int main(int argc, char* argv[])
 			kfx_source->read(&shader_ver, sizeof(shader_ver));
 			shader_ver = LE2Native(shader_ver);
 
-			if ((caps.native_shader_fourcc == shader_fourcc) && (caps.native_shader_version == shader_ver))
+			if ((re.NativeShaderFourCC() == shader_fourcc) && (re.NativeShaderVersion() == shader_ver))
 			{
 				uint64_t timestamp;
 				kfx_source->read(&timestamp, sizeof(timestamp));
@@ -245,7 +256,7 @@ int main(int argc, char* argv[])
 
 	if (!skip_jit)
 	{
-		Offline::RenderEffect effect(caps);
+		RenderEffect effect;
 		effect.Load(fxml_name);
 	}
 	if (!target_folder.empty())
