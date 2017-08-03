@@ -31,6 +31,7 @@
 #include <KlayGE/KlayGE.hpp>
 
 #include <KlayGE/NullRender/NullRenderEngine.hpp>
+#include <KlayGE/NullRender/NullRenderStateObject.hpp>
 #include <KlayGE/NullRender/NullShaderObject.hpp>
 
 #include <KlayGE/NullRender/NullRenderFactory.hpp>
@@ -368,16 +369,12 @@ namespace KlayGE
 	RenderStateObjectPtr NullRenderFactory::DoMakeRenderStateObject(RasterizerStateDesc const & rs_desc,
 		DepthStencilStateDesc const & dss_desc, BlendStateDesc const & bs_desc)
 	{
-		KFL_UNUSED(rs_desc);
-		KFL_UNUSED(dss_desc);
-		KFL_UNUSED(bs_desc);
-		return RenderStateObjectPtr();
+        return MakeSharedPtr<NullRenderStateObject>(rs_desc, dss_desc, bs_desc);
 	}
 
 	SamplerStateObjectPtr NullRenderFactory::DoMakeSamplerStateObject(SamplerStateDesc const & desc)
 	{
-		KFL_UNUSED(desc);
-		return SamplerStateObjectPtr();
+        return MakeSharedPtr<NullSamplerStateObject>(desc);
 	}
 
 	void NullRenderFactory::DoSuspend()

@@ -10,6 +10,7 @@ SET(LIB_NAME KlayGE_RenderEngine_NullRender)
 SET(NULL_RE_SOURCE_FILES
 	${KLAYGE_PROJECT_DIR}/Plugins/Src/Render/NullRender/NullRenderEngine.cpp
 	${KLAYGE_PROJECT_DIR}/Plugins/Src/Render/NullRender/NullRenderFactory.cpp
+	${KLAYGE_PROJECT_DIR}/Plugins/Src/Render/NullRender/NullRenderStateObject.cpp
 	${KLAYGE_PROJECT_DIR}/Plugins/Src/Render/NullRender/NullShaderObject.cpp
 )
 
@@ -17,6 +18,7 @@ SET(NULL_RE_HEADER_FILES
 	${KLAYGE_PROJECT_DIR}/Plugins/Include/KlayGE/NullRender/NullRenderEngine.hpp
 	${KLAYGE_PROJECT_DIR}/Plugins/Include/KlayGE/NullRender/NullRenderFactory.hpp
 	${KLAYGE_PROJECT_DIR}/Plugins/Include/KlayGE/NullRender/NullRenderFactoryInternal.hpp
+	${KLAYGE_PROJECT_DIR}/Plugins/Include/KlayGE/NullRender/NullRenderStateObject.hpp
 	${KLAYGE_PROJECT_DIR}/Plugins/Include/KlayGE/NullRender/NullShaderObject.hpp
 )
 
