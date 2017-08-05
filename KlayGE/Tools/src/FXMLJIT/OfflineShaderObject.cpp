@@ -106,16 +106,16 @@ namespace
 		}
 
 		HRESULT D3DCompile(std::string const & src_data,
-			D3D_SHADER_MACRO const * defines, std::string const & entry_point,
-			std::string const & target, uint32_t flags1, uint32_t flags2,
+			D3D_SHADER_MACRO const * defines, char const * entry_point,
+			char const * target, uint32_t flags1, uint32_t flags2,
 			std::vector<uint8_t>& code, std::string& error_msgs) const
 		{
 #ifdef CALL_D3DCOMPILER_DIRECTLY
 			ID3DBlob* code_blob = nullptr;
 			ID3DBlob* error_msgs_blob = nullptr;
 			HRESULT hr = DynamicD3DCompile_(src_data.c_str(), static_cast<UINT>(src_data.size()),
-				nullptr, defines, nullptr, entry_point.c_str(),
-				target.c_str(), flags1, flags2, &code_blob, &error_msgs_blob);
+				nullptr, defines, nullptr, entry_point,
+				target, flags1, flags2, &code_blob, &error_msgs_blob);
 			if (code_blob)
 			{
 				uint8_t const * p = static_cast<uint8_t const *>(code_blob->GetBufferPointer());

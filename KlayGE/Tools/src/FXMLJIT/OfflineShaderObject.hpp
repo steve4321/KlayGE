@@ -159,7 +159,7 @@ namespace KlayGE
 			virtual void StreamOut(std::ostream& os, ShaderType type) = 0;
 
 			virtual void AttachShader(ShaderType type, RenderEffect const & effect,
-				RenderTechnique const & tech, RenderPass const & pass, std::vector<uint32_t> const & shader_desc_ids) = 0;
+				RenderTechnique const & tech, RenderPass const & pass, std::array<uint32_t, ST_NumShaderTypes> const & shader_desc_ids) = 0;
 			virtual void AttachShader(ShaderType type, RenderEffect const & effect,
 				RenderTechnique const & tech, RenderPass const & pass, ShaderObjectPtr const & shared_so) = 0;
 			virtual void LinkShaders(RenderEffect const & effect) = 0;

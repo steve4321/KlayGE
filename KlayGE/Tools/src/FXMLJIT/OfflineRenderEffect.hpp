@@ -820,7 +820,7 @@ namespace KlayGE
 			size_t name_hash_;
 			std::shared_ptr<std::vector<RenderEffectAnnotationPtr>> annotations_;
 			std::shared_ptr<std::vector<std::pair<std::string, std::string>>> macros_;
-			std::shared_ptr<std::vector<uint32_t>> shader_desc_ids_;
+			std::shared_ptr<std::array<uint32_t, ShaderObject::ST_NumShaderTypes>> shader_desc_ids_;
 
 			RasterizerStateDesc rasterizer_state_desc_;
 			DepthStencilStateDesc depth_stencil_state_desc_;

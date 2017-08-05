@@ -45,26 +45,37 @@ namespace KlayGE
 		public:
 			explicit OGLShaderObject(OfflineRenderDeviceCaps const & caps);
 
-			virtual void StreamOut(std::ostream& os, ShaderType type) override;
+			void StreamOut(std::ostream& os, ShaderType type) override;
 
 			void AttachShader(ShaderType type, RenderEffect const & effect,
-				RenderTechnique const & tech, RenderPass const & pass, std::vector<uint32_t> const & shader_desc_ids);
+				RenderTechnique const & tech, RenderPass const & pass, std::array<uint32_t, ST_NumShaderTypes> const & shader_desc_ids) override;
 			void AttachShader(ShaderType type, RenderEffect const & effect,
-				RenderTechnique const & tech, RenderPass const & pass, ShaderObjectPtr const & shared_so);
-			void LinkShaders(RenderEffect const & effect);
+				RenderTechnique const & tech, RenderPass const & pass, ShaderObjectPtr const & shared_so) override;
+			void LinkShaders(RenderEffect const & effect) override;
 
 		private:
-			std::shared_ptr<std::array<std::string, ST_NumShaderTypes>> shader_func_names_;
-			std::shared_ptr<std::array<std::shared_ptr<std::string>, ST_NumShaderTypes>> glsl_srcs_;
-			std::shared_ptr<std::array<std::shared_ptr<std::vector<std::string>>, ST_NumShaderTypes>> pnames_;
-			std::shared_ptr<std::array<std::shared_ptr<std::vector<std::string>>, ST_NumShaderTypes>> glsl_res_names_;
-			std::shared_ptr<std::vector<VertexElementUsage>> vs_usages_;
-			std::shared_ptr<std::vector<uint8_t>> vs_usage_indices_;
-			std::shared_ptr<std::vector<std::string>> glsl_vs_attrib_names_;
-			int32_t gs_input_type_, gs_output_type_, gs_max_output_vertex_;
-			uint32_t ds_partitioning_, ds_output_primitive_;
+			struct OGLShaderObjectTemplate
+			{
+				OGLShaderObjectTemplate();
 
-			std::vector<std::tuple<std::string, RenderEffectParameterPtr, RenderEffectParameterPtr, uint32_t>> tex_sampler_binds_;
+				std::shared_ptr<std::array<std::string, ST_NumShaderTypes>> shader_func_names_;
+				std::shared_ptr<std::array<std::shared_ptr<std::string>, ST_NumShaderTypes>> glsl_srcs_;
+				std::shared_ptr<std::array<std::shared_ptr<std::vector<std::string>>, ST_NumShaderTypes>> pnames_;
+				std::shared_ptr<std::array<std::shared_ptr<std::vector<std::string>>, ST_NumShaderTypes>> glsl_res_names_;
+				std::shared_ptr<std::vector<VertexElementUsage>> vs_usages_;
+				std::shared_ptr<std::vector<uint8_t>> vs_usage_indices_;
+				std::shared_ptr<std::vector<std::string>> glsl_vs_attrib_names_;
+				int32_t gs_input_type_, gs_output_type_, gs_max_output_vertex_;
+				uint32_t ds_partitioning_, ds_output_primitive_;
+			};
+
+		public:
+			OGLShaderObject(OfflineRenderDeviceCaps const & caps, std::shared_ptr<OGLShaderObjectTemplate> const & so_template);
+
+		private:
+			std::shared_ptr<OGLShaderObjectTemplate> so_template_;
+
+			std::vector<std::tuple<std::string, RenderEffectParameter*, RenderEffectParameter*, uint32_t>> tex_sampler_binds_;
 		};
 
 		typedef std::shared_ptr<OGLShaderObject> OGLShaderObjectPtr;

@@ -3139,7 +3139,7 @@ namespace KlayGE
 			this->CreateShaderObject();
 
 			shader_desc_ids_ = MakeSharedPtr<std::remove_reference<decltype(*shader_desc_ids_)>::type>();
-			shader_desc_ids_->resize(ShaderObject::ST_NumShaderTypes, 0);
+			shader_desc_ids_->fill(0);
 
 			if (inherit_pass)
 			{
@@ -3578,7 +3578,7 @@ namespace KlayGE
 			this->CreateShaderObject();
 
 			shader_desc_ids_ = MakeSharedPtr<std::remove_reference<decltype(*shader_desc_ids_)>::type>();
-			shader_desc_ids_->resize(ShaderObject::ST_NumShaderTypes, 0);
+			shader_desc_ids_->fill(0);
 
 			rasterizer_state_desc_ = inherit_pass->rasterizer_state_desc_;
 			depth_stencil_state_desc_ = inherit_pass->depth_stencil_state_desc_;

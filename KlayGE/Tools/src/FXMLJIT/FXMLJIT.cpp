@@ -241,7 +241,13 @@ int main(int argc, char* argv[])
 			kfx_source->read(&shader_ver, sizeof(shader_ver));
 			shader_ver = LE2Native(shader_ver);
 
-			if ((re.NativeShaderFourCC() == shader_fourcc) && (re.NativeShaderVersion() == shader_ver))
+			uint8_t shader_platform_name_len;
+			kfx_source->read(&shader_platform_name_len, sizeof(shader_platform_name_len));
+			std::string shader_platform_name(shader_platform_name_len, 0);
+			kfx_source->read(&shader_platform_name[0], shader_platform_name_len);
+
+			if ((caps.native_shader_fourcc == shader_fourcc) && (caps.native_shader_version == shader_ver)
+				&& (caps.platform == shader_platform_name))
 			{
 				uint64_t timestamp;
 				kfx_source->read(&timestamp, sizeof(timestamp));
@@ -256,7 +262,7 @@ int main(int argc, char* argv[])
 
 	if (!skip_jit)
 	{
-		RenderEffect effect;
+		Offline::RenderEffect effect(caps);
 		effect.Load(fxml_name);
 	}
 	if (!target_folder.empty())

@@ -59,7 +59,13 @@ namespace KlayGE
 	namespace Offline
 	{
 		D3D11ShaderObject::D3D11ShaderObject(OfflineRenderDeviceCaps const & caps)
-				: ShaderObject(caps), vs_signature_(0)
+			: D3D11ShaderObject(caps, MakeSharedPtr<D3D11ShaderObjectTemplate>())
+		{
+		}
+
+		D3D11ShaderObject::D3D11ShaderObject(OfflineRenderDeviceCaps const & caps, std::shared_ptr<D3D11ShaderObjectTemplate> const & so_template)
+			: ShaderObject(caps),
+				so_template_(so_template)
 		{
 			is_shader_validate_.fill(true);
 
@@ -121,12 +127,12 @@ namespace KlayGE
 			std::ostringstream oss(std::ios_base::binary | std::ios_base::out);
 
 			{
-				uint8_t len = static_cast<uint8_t>(shader_code_[type].second.size());
+				uint8_t len = static_cast<uint8_t>(so_template_->shader_code_[type].second.size());
 				oss.write(reinterpret_cast<char const *>(&len), sizeof(len));
-				oss.write(reinterpret_cast<char const *>(&shader_code_[type].second[0]), len);
+				oss.write(reinterpret_cast<char const *>(&so_template_->shader_code_[type].second[0]), len);
 			}
 
-			std::shared_ptr<std::vector<uint8_t>> code_blob = shader_code_[type].first;
+			std::shared_ptr<std::vector<uint8_t>> code_blob = so_template_->shader_code_[type].first;
 			if (code_blob)
 			{
 				uint8_t len;
@@ -135,7 +141,7 @@ namespace KlayGE
 				oss.write(reinterpret_cast<char const *>(&blob_size), sizeof(blob_size));
 				oss.write(reinterpret_cast<char const *>(&((*code_blob)[0])), code_blob->size());
 
-				D3D11ShaderDesc const & sd = shader_desc_[type];
+				auto const & sd = *so_template_->shader_desc_[type];
 
 				uint16_t cb_desc_size = Native2LE(static_cast<uint16_t>(sd.cb_desc.size()));
 				oss.write(reinterpret_cast<char const *>(&cb_desc_size), sizeof(cb_desc_size));
@@ -160,7 +166,8 @@ namespace KlayGE
 						oss.write(reinterpret_cast<char const *>(&start_offset), sizeof(start_offset));
 						oss.write(reinterpret_cast<char const *>(&sd.cb_desc[i].var_desc[j].type), sizeof(sd.cb_desc[i].var_desc[j].type));
 						oss.write(reinterpret_cast<char const *>(&sd.cb_desc[i].var_desc[j].rows), sizeof(sd.cb_desc[i].var_desc[j].rows));
-						oss.write(reinterpret_cast<char const *>(&sd.cb_desc[i].var_desc[j].columns), sizeof(sd.cb_desc[i].var_desc[j].columns));
+						oss.write(reinterpret_cast<char const *>(&sd.cb_desc[i].var_desc[j].columns),
+							sizeof(sd.cb_desc[i].var_desc[j].columns));
 						uint16_t elements = Native2LE(sd.cb_desc[i].var_desc[j].elements);
 						oss.write(reinterpret_cast<char const *>(&elements), sizeof(elements));
 					}
@@ -189,7 +196,7 @@ namespace KlayGE
 
 				if (ST_VertexShader == type)
 				{
-					uint32_t vs_signature = Native2LE(vs_signature_);
+					uint32_t vs_signature = Native2LE(so_template_->vs_signature_);
 					oss.write(reinterpret_cast<char const *>(&vs_signature), sizeof(vs_signature));
 				}
 				else if (ST_ComputeShader == type)
@@ -217,13 +224,14 @@ namespace KlayGE
 			}
 		}
 
-		std::shared_ptr<std::vector<uint8_t>> D3D11ShaderObject::CompiteToBytecode(ShaderType type, RenderEffect const & effect,
-				RenderTechnique const & tech, RenderPass const & pass, std::vector<uint32_t> const & shader_desc_ids)
+		std::shared_ptr<std::vector<uint8_t>> D3D11ShaderObject::CompiteToBytecode(ShaderType type,
+				RenderEffect const & effect, RenderTechnique const & tech, RenderPass const & pass,
+				std::array<uint32_t, ST_NumShaderTypes> const & shader_desc_ids)
 		{
 #ifdef KLAYGE_PLATFORM_WINDOWS_DESKTOP
 			OfflineRenderDeviceCaps const & caps = caps_;
 
-			ShaderDesc const & sd = effect.GetShaderDesc(shader_desc_ids[type]);
+			auto const & sd = effect.GetShaderDesc(shader_desc_ids[type]);
 
 			is_shader_validate_[type] = true;
 
@@ -309,7 +317,7 @@ namespace KlayGE
 				is_shader_validate_[type] = false;
 				break;
 			}
-			shader_code_[type].second = shader_profile;
+			so_template_->shader_code_[type].second = shader_profile;
 
 			std::shared_ptr<std::vector<uint8_t>> code = MakeSharedPtr<std::vector<uint8_t>>();
 			if (is_shader_validate_[type])
@@ -330,6 +338,11 @@ namespace KlayGE
 					this->ReflectDXBC(*code, reinterpret_cast<void**>(&reflection));
 					if (reflection != nullptr)
 					{
+						if (!so_template_->shader_desc_[type])
+						{
+							so_template_->shader_desc_[type] = MakeSharedPtr<D3D11ShaderObjectTemplate::D3D11ShaderDesc>();
+						}
+
 						D3D11_SHADER_DESC desc;
 						reflection->GetDesc(&desc);
 
@@ -341,7 +354,7 @@ namespace KlayGE
 							reflection_cb->GetDesc(&d3d_cb_desc);
 							if ((D3D_CT_CBUFFER == d3d_cb_desc.Type) || (D3D_CT_TBUFFER == d3d_cb_desc.Type))
 							{
-								D3D11ShaderDesc::ConstantBufferDesc cb_desc;
+								D3D11ShaderObjectTemplate::D3D11ShaderDesc::ConstantBufferDesc cb_desc;
 								cb_desc.name = d3d_cb_desc.Name;
 								cb_desc.name_hash = RT_HASH(d3d_cb_desc.Name);
 								cb_desc.size = d3d_cb_desc.Size;
@@ -356,7 +369,7 @@ namespace KlayGE
 									D3D11_SHADER_TYPE_DESC type_desc;
 									reflection_var->GetType()->GetDesc(&type_desc);
 
-									D3D11ShaderDesc::ConstantBufferDesc::VariableDesc vd;
+									D3D11ShaderObjectTemplate::D3D11ShaderDesc::ConstantBufferDesc::VariableDesc vd;
 									vd.name = var_desc.Name;
 									vd.start_offset = var_desc.StartOffset;
 									vd.type = static_cast<uint8_t>(type_desc.Type);
@@ -366,13 +379,13 @@ namespace KlayGE
 									cb_desc.var_desc.push_back(vd);
 								}
 
-								shader_desc_[type].cb_desc.push_back(cb_desc);
+								so_template_->shader_desc_[type]->cb_desc.push_back(cb_desc);
 							}
 						}
 
-						int num_samplers = -1;
-						int num_srvs = -1;
-						int num_uavs = -1;
+						int max_sampler_bind_pt = -1;
+						int max_srv_bind_pt = -1;
+						int max_uav_bind_pt = -1;
 						for (uint32_t i = 0; i < desc.BoundResources; ++ i)
 						{
 							D3D11_SHADER_INPUT_BIND_DESC si_desc;
@@ -381,13 +394,13 @@ namespace KlayGE
 							switch (si_desc.Type)
 							{
 							case D3D_SIT_SAMPLER:
-								num_samplers = std::max(num_samplers, static_cast<int>(si_desc.BindPoint));
+								max_sampler_bind_pt = std::max(max_sampler_bind_pt, static_cast<int>(si_desc.BindPoint));
 								break;
 
 							case D3D_SIT_TEXTURE:
 							case D3D_SIT_STRUCTURED:
 							case D3D_SIT_BYTEADDRESS:
-								num_srvs = std::max(num_srvs, static_cast<int>(si_desc.BindPoint));
+								max_srv_bind_pt = std::max(max_srv_bind_pt, static_cast<int>(si_desc.BindPoint));
 								break;
 
 							case D3D_SIT_UAV_RWTYPED:
@@ -396,7 +409,7 @@ namespace KlayGE
 							case D3D_SIT_UAV_APPEND_STRUCTURED:
 							case D3D_SIT_UAV_CONSUME_STRUCTURED:
 							case D3D_SIT_UAV_RWSTRUCTURED_WITH_COUNTER:
-								num_uavs = std::max(num_uavs, static_cast<int>(si_desc.BindPoint));
+								max_uav_bind_pt = std::max(max_uav_bind_pt, static_cast<int>(si_desc.BindPoint));
 								break;
 
 							default:
@@ -404,9 +417,9 @@ namespace KlayGE
 							}
 						}
 
-						shader_desc_[type].num_samplers = static_cast<uint16_t>(num_samplers + 1);
-						shader_desc_[type].num_srvs = static_cast<uint16_t>(num_srvs + 1);
-						shader_desc_[type].num_uavs = static_cast<uint16_t>(num_uavs + 1);
+						so_template_->shader_desc_[type]->num_samplers = static_cast<uint16_t>(max_sampler_bind_pt + 1);
+						so_template_->shader_desc_[type]->num_srvs = static_cast<uint16_t>(max_srv_bind_pt + 1);
+						so_template_->shader_desc_[type]->num_uavs = static_cast<uint16_t>(max_uav_bind_pt + 1);
 
 						for (uint32_t i = 0; i < desc.BoundResources; ++ i)
 						{
@@ -427,11 +440,11 @@ namespace KlayGE
 							case D3D_SIT_UAV_RWSTRUCTURED_WITH_COUNTER:
 								if (effect.ParameterByName(si_desc.Name))
 								{
-									D3D11ShaderDesc::BoundResourceDesc brd;
+									D3D11ShaderObjectTemplate::D3D11ShaderDesc::BoundResourceDesc brd;
 									brd.name = si_desc.Name;
 									brd.type = static_cast<uint8_t>(si_desc.Type);
 									brd.bind_point = static_cast<uint16_t>(si_desc.BindPoint);
-									shader_desc_[type].res_desc.push_back(brd);
+									so_template_->shader_desc_[type]->res_desc.push_back(brd);
 								}
 								break;
 
@@ -442,7 +455,7 @@ namespace KlayGE
 
 						if (ST_VertexShader == type)
 						{
-							vs_signature_ = 0;
+							so_template_->vs_signature_ = 0;
 							D3D11_SIGNATURE_PARAMETER_DESC signature;
 							for (uint32_t i = 0; i < desc.InputParameters; ++ i)
 							{
@@ -458,9 +471,9 @@ namespace KlayGE
 								HashCombine(seed, signature.Stream);
 								HashCombine(seed, signature.MinPrecision);
 
-								size_t sig = vs_signature_;
+								size_t sig = so_template_->vs_signature_;
 								HashCombine(sig, seed);
-								vs_signature_ = static_cast<uint32_t>(sig);
+								so_template_->vs_signature_ = static_cast<uint32_t>(sig);
 							}
 						}
 						else if (ST_ComputeShader == type)
@@ -482,7 +495,7 @@ namespace KlayGE
 			}
 
 			return code;
-	#else
+#else
 			KFL_UNUSED(type);
 			KFL_UNUSED(effect);
 			KFL_UNUSED(tech);
@@ -490,11 +503,11 @@ namespace KlayGE
 			KFL_UNUSED(shader_desc_ids);
 
 			return std::shared_ptr<std::vector<uint8_t>>();
-	#endif
+#endif
 		}
 
 		void D3D11ShaderObject::AttachShaderBytecode(ShaderType type, RenderEffect const & effect,
-			std::vector<uint32_t> const & shader_desc_ids, std::shared_ptr<std::vector<uint8_t>> const & code_blob)
+			std::array<uint32_t, ST_NumShaderTypes> const & shader_desc_ids, std::shared_ptr<std::vector<uint8_t>> const & code_blob)
 		{
 			if (code_blob)
 			{
@@ -521,17 +534,17 @@ namespace KlayGE
 							}
 						}
 
-						shader_code_[type].first = code_blob;
+						so_template_->shader_code_[type].first = code_blob;
 						break;
 
 					case ST_PixelShader:
-						shader_code_[type].first = code_blob;
+						so_template_->shader_code_[type].first = code_blob;
 						break;
 
 					case ST_GeometryShader:
 						if (caps.gs_support)
 						{
-							shader_code_[type].first = code_blob;
+							so_template_->shader_code_[type].first = code_blob;
 						}
 						else
 						{
@@ -542,7 +555,7 @@ namespace KlayGE
 					case ST_ComputeShader:
 						if (caps.cs_support)
 						{
-							shader_code_[type].first = code_blob;
+							so_template_->shader_code_[type].first = code_blob;
 						}
 						else
 						{
@@ -553,7 +566,7 @@ namespace KlayGE
 					case ST_HullShader:
 						if (caps.hs_support)
 						{
-							shader_code_[type].first = code_blob;
+							so_template_->shader_code_[type].first = code_blob;
 						}
 						else
 						{
@@ -572,7 +585,7 @@ namespace KlayGE
 								}
 							}
 
-							shader_code_[type].first = code_blob;
+							so_template_->shader_code_[type].first = code_blob;
 						}
 						else
 						{
@@ -587,21 +600,22 @@ namespace KlayGE
 				}
 
 				// Shader reflection
-				cbuff_indices_[type].resize(shader_desc_[type].cb_desc.size());
-				for (size_t c = 0; c < shader_desc_[type].cb_desc.size(); ++ c)
+				if (!so_template_->shader_desc_[type]->cb_desc.empty())
 				{
-					bool found = false;
-					for (uint32_t i = 0; i < effect.NumCBuffers(); ++ i)
+					so_template_->cbuff_indices_[type] = MakeSharedPtr<std::vector<uint8_t>>(so_template_->shader_desc_[type]->cb_desc.size());
+				}
+				for (size_t c = 0; c < so_template_->shader_desc_[type]->cb_desc.size(); ++ c)
+				{
+					uint32_t i = 0;
+					for (; i < effect.NumCBuffers(); ++ i)
 					{
-						if (effect.CBufferByIndex(i)->NameHash() == shader_desc_[type].cb_desc[c].name_hash)
+						if (effect.CBufferByIndex(i)->NameHash() == so_template_->shader_desc_[type]->cb_desc[c].name_hash)
 						{
-							cbuff_indices_[type][c] = static_cast<uint8_t>(i);
-							found = true;
+							(*so_template_->cbuff_indices_[type])[c] = static_cast<uint8_t>(i);
 							break;
 						}
 					}
-					BOOST_ASSERT(found);
-					KFL_UNUSED(found);
+					BOOST_ASSERT(i < effect.NumCBuffers());
 				}
 			}
 			else
@@ -611,7 +625,7 @@ namespace KlayGE
 		}
 
 		void D3D11ShaderObject::AttachShader(ShaderType type, RenderEffect const & effect,
-				RenderTechnique const & tech, RenderPass const & pass, std::vector<uint32_t> const & shader_desc_ids)
+				RenderTechnique const & tech, RenderPass const & pass, std::array<uint32_t, ST_NumShaderTypes> const & shader_desc_ids)
 		{
 			std::shared_ptr<std::vector<uint8_t>> code_blob = this->CompiteToBytecode(type, effect, tech, pass, shader_desc_ids);
 			this->AttachShaderBytecode(type, effect, shader_desc_ids, code_blob);
@@ -625,12 +639,12 @@ namespace KlayGE
 				D3D11ShaderObject const & so = *checked_cast<D3D11ShaderObject*>(shared_so.get());
 
 				is_shader_validate_[type] = so.is_shader_validate_[type];
-				shader_code_[type] = so.shader_code_[type];
-				shader_desc_[type] = so.shader_desc_[type];
+				so_template_->shader_code_[type] = so.so_template_->shader_code_[type];
+				so_template_->shader_desc_[type] = so.so_template_->shader_desc_[type];
 				switch (type)
 				{
 				case ST_VertexShader:
-					vs_signature_ = so.vs_signature_;
+					so_template_->vs_signature_ = so.so_template_->vs_signature_;
 					break;
 
 				case ST_PixelShader:
@@ -656,52 +670,52 @@ namespace KlayGE
 					break;
 				}
 
-				cbuff_indices_[type] = so.cbuff_indices_[type];
+				so_template_->cbuff_indices_[type] = so.so_template_->cbuff_indices_[type];
 			}
 		}
 
 		void D3D11ShaderObject::LinkShaders(RenderEffect const & effect)
 		{
-			std::vector<uint32_t> all_cbuff_indices;
 			is_validate_ = true;
 			for (size_t type = 0; type < ShaderObject::ST_NumShaderTypes; ++ type)
 			{
 				is_validate_ &= is_shader_validate_[type];
 
-				all_cbuff_indices.insert(all_cbuff_indices.end(),
-					cbuff_indices_[type].begin(), cbuff_indices_[type].end());
-				for (size_t i = 0; i < cbuff_indices_[type].size(); ++ i)
+				if (so_template_->cbuff_indices_[type] && !so_template_->cbuff_indices_[type]->empty())
 				{
-					RenderEffectConstantBufferPtr const & cbuff = effect.CBufferByIndex(cbuff_indices_[type][i]);
-					cbuff->Resize(shader_desc_[type].cb_desc[i].size);
-					BOOST_ASSERT(cbuff->NumParameters() == shader_desc_[type].cb_desc[i].var_desc.size());
-					for (uint32_t j = 0; j < cbuff->NumParameters(); ++ j)
+					for (size_t i = 0; i < so_template_->cbuff_indices_[type]->size(); ++ i)
 					{
-						RenderEffectParameterPtr const & param = effect.ParameterByIndex(cbuff->ParameterIndex(j));
-						uint32_t stride;
-						if (shader_desc_[type].cb_desc[i].var_desc[j].elements > 0)
+						RenderEffectConstantBufferPtr const & cbuff = effect.CBufferByIndex((*so_template_->cbuff_indices_[type])[i]);
+						cbuff->Resize(so_template_->shader_desc_[type]->cb_desc[i].size);
+						BOOST_ASSERT(cbuff->NumParameters() == so_template_->shader_desc_[type]->cb_desc[i].var_desc.size());
+						for (uint32_t j = 0; j < cbuff->NumParameters(); ++ j)
 						{
-							if (param->Type() != REDT_float4x4)
+							RenderEffectParameterPtr const & param = effect.ParameterByIndex(cbuff->ParameterIndex(j));
+							uint32_t stride;
+							if (so_template_->shader_desc_[type]->cb_desc[i].var_desc[j].elements > 0)
 							{
-								stride = 16;
+								if (param->Type() != REDT_float4x4)
+								{
+									stride = 16;
+								}
+								else
+								{
+									stride = 64;
+								}
 							}
 							else
 							{
-								stride = 64;
+								if (param->Type() != REDT_float4x4)
+								{
+									stride = 4;
+								}
+								else
+								{
+									stride = 16;
+								}
 							}
+							param->BindToCBuffer(cbuff, so_template_->shader_desc_[type]->cb_desc[i].var_desc[j].start_offset, stride);
 						}
-						else
-						{
-							if (param->Type() != REDT_float4x4)
-							{
-								stride = 4;
-							}
-							else
-							{
-								stride = 16;
-							}
-						}
-						param->BindToCBuffer(cbuff, shader_desc_[type].cb_desc[i].var_desc[j].start_offset, stride);
 					}
 				}
 			}
