@@ -28,8 +28,8 @@
  * from http://www.klayge.org/licensing/.
  */
 
-#ifndef _KLAYGE_PLUGINS_NULL_RENDER_FACTORY_HPP
-#define _KLAYGE_PLUGINS_NULL_RENDER_FACTORY_HPP
+#ifndef KLAYGE_PLUGINS_NULL_RENDER_FACTORY_HPP
+#define KLAYGE_PLUGINS_NULL_RENDER_FACTORY_HPP
 
 #pragma once
 
@@ -46,4 +46,4 @@ extern "C"
 	KLAYGE_NULL_RE_API void MakeRenderFactory(std::unique_ptr<KlayGE::RenderFactory>& ptr);
 }
 
-#endif			// _KLAYGE_PLUGINS_NULL_RENDER_FACTORY_HPP
+#endif			// KLAYGE_PLUGINS_NULL_RENDER_FACTORY_HPP

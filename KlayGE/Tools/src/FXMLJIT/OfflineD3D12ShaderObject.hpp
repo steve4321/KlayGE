@@ -38,9 +38,6 @@
 
 #ifdef KLAYGE_PLATFORM_WINDOWS
 
-#include <KlayGE/SALWrapper.hpp>
-#include <d3d12shader.h>
-
 namespace KlayGE
 {
 	namespace Offline
@@ -147,8 +144,6 @@ namespace KlayGE
 			char const * cs_profile_;
 			char const * hs_profile_;
 			char const * ds_profile_;
-
-			D3D_FEATURE_LEVEL feature_level_;
 		};
 
 		typedef std::shared_ptr<D3D12ShaderObject> D3D12ShaderObjectPtr;

@@ -49,6 +49,7 @@
 #ifdef KLAYGE_PLATFORM_WINDOWS_DESKTOP
 #include <KlayGE/SALWrapper.hpp>
 #include <d3dcompiler.h>
+#include <d3d12shader.h>
 #endif
 
 #include "OfflineRenderEffect.hpp"
@@ -69,18 +70,19 @@ namespace KlayGE
 		{
 			is_shader_validate_.fill(true);
 
+			D3D_FEATURE_LEVEL feature_level;
 			switch (caps.major_version)
 			{
 			case 12:
 				switch (caps.minor_version)
 				{
 				case 1:
-					feature_level_ = D3D_FEATURE_LEVEL_12_1;
+					feature_level = D3D_FEATURE_LEVEL_12_1;
 					break;
 
 				default:
 				case 0:
-					feature_level_ = D3D_FEATURE_LEVEL_12_0;
+					feature_level = D3D_FEATURE_LEVEL_12_0;
 					break;
 				}
 				break;
@@ -89,12 +91,12 @@ namespace KlayGE
 				switch (caps.minor_version)
 				{
 				case 1:
-					feature_level_ = D3D_FEATURE_LEVEL_11_1;
+					feature_level = D3D_FEATURE_LEVEL_11_1;
 					break;
 
 				default:
 				case 0:
-					feature_level_ = D3D_FEATURE_LEVEL_11_0;
+					feature_level = D3D_FEATURE_LEVEL_11_0;
 					break;
 				}
 				break;
@@ -103,7 +105,7 @@ namespace KlayGE
 				KFL_UNREACHABLE("Invalid shader version");
 			}
 
-			switch (feature_level_)
+			switch (feature_level)
 			{
 			case D3D_FEATURE_LEVEL_12_1:
 			case D3D_FEATURE_LEVEL_12_0:
@@ -657,48 +659,12 @@ namespace KlayGE
 
 		void D3D12ShaderObject::LinkShaders(RenderEffect const & effect)
 		{
+			KFL_UNUSED(effect);
+
 			is_validate_ = true;
 			for (size_t type = 0; type < ST_NumShaderTypes; ++ type)
 			{
 				is_validate_ &= is_shader_validate_[type];
-
-				if (so_template_->cbuff_indices_[type] && !so_template_->cbuff_indices_[type]->empty())
-				{
-					for (size_t i = 0; i < so_template_->cbuff_indices_[type]->size(); ++ i)
-					{
-						RenderEffectConstantBufferPtr const & cbuff = effect.CBufferByIndex((*so_template_->cbuff_indices_[type])[i]);
-						cbuff->Resize(so_template_->shader_desc_[type]->cb_desc[i].size);
-						BOOST_ASSERT(cbuff->NumParameters() == so_template_->shader_desc_[type]->cb_desc[i].var_desc.size());
-						for (uint32_t j = 0; j < cbuff->NumParameters(); ++ j)
-						{
-							RenderEffectParameterPtr const & param = effect.ParameterByIndex(cbuff->ParameterIndex(j));
-							uint32_t stride;
-							if (so_template_->shader_desc_[type]->cb_desc[i].var_desc[j].elements > 0)
-							{
-								if (param->Type() != REDT_float4x4)
-								{
-									stride = 16;
-								}
-								else
-								{
-									stride = 64;
-								}
-							}
-							else
-							{
-								if (param->Type() != REDT_float4x4)
-								{
-									stride = 4;
-								}
-								else
-								{
-									stride = 16;
-								}
-							}
-							param->BindToCBuffer(cbuff, so_template_->shader_desc_[type]->cb_desc[i].var_desc[j].start_offset, stride);
-						}
-					}
-				}
 			}
 		}
 	}

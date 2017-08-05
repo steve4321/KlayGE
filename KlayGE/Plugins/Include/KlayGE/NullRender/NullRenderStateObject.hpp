@@ -28,8 +28,8 @@
  * from http://www.klayge.org/licensing/.
  */
 
-#ifndef _KLAYGE_PLUGINS_NULL_RENDER_STATE_OBJECT_HPP
-#define _KLAYGE_PLUGINS_NULL_RENDER_STATE_OBJECT_HPP
+#ifndef KLAYGE_PLUGINS_NULL_RENDER_STATE_OBJECT_HPP
+#define KLAYGE_PLUGINS_NULL_RENDER_STATE_OBJECT_HPP
 
 #pragma once
 
@@ -41,7 +41,7 @@ namespace KlayGE
 	class NullRenderStateObject : public RenderStateObject
 	{
 	public:
-        NullRenderStateObject(RasterizerStateDesc const & rs_desc, DepthStencilStateDesc const & dss_desc,
+		NullRenderStateObject(RasterizerStateDesc const & rs_desc, DepthStencilStateDesc const & dss_desc,
 			BlendStateDesc const & bs_desc);
 
 		void Active();
@@ -54,4 +54,4 @@ namespace KlayGE
 	};
 }
 
-#endif			// _KLAYGE_PLUGINS_NULL_RENDER_STATE_OBJECT_HPP
+#endif			// KLAYGE_PLUGINS_NULL_RENDER_STATE_OBJECT_HPP

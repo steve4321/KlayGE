@@ -262,7 +262,7 @@ int main(int argc, char* argv[])
 
 	if (!skip_jit)
 	{
-		Offline::RenderEffect effect(caps);
+		RenderEffect effect;
 		effect.Load(fxml_name);
 	}
 	if (!target_folder.empty())

@@ -28,8 +28,8 @@
  * from http://www.klayge.org/licensing/.
  */
 
-#ifndef _KLAYGE_PLUGINS_NULL_SHADER_OBJECT_HPP
-#define _KLAYGE_PLUGINS_NULL_SHADER_OBJECT_HPP
+#ifndef KLAYGE_PLUGINS_NULL_SHADER_OBJECT_HPP
+#define KLAYGE_PLUGINS_NULL_SHADER_OBJECT_HPP
 
 #pragma once
 
@@ -60,7 +60,79 @@ namespace KlayGE
 
 		void Bind() override;
 		void Unbind() override;
+
+	private:
+		struct D3D11ShaderObjectTemplate
+		{
+#ifdef KLAYGE_HAS_STRUCT_PACK
+#pragma pack(push, 2)
+#endif
+			struct D3D11ShaderDesc
+			{
+				D3D11ShaderDesc()
+					: num_samplers(0), num_srvs(0), num_uavs(0)
+				{
+				}
+
+				struct ConstantBufferDesc
+				{
+					ConstantBufferDesc()
+						: size(0)
+					{
+					}
+
+					struct VariableDesc
+					{
+						std::string name;
+						uint32_t start_offset;
+						uint8_t type;
+						uint8_t rows;
+						uint8_t columns;
+						uint16_t elements;
+					};
+					std::vector<VariableDesc> var_desc;
+
+					std::string name;
+					size_t name_hash;
+					uint32_t size;
+				};
+				std::vector<ConstantBufferDesc> cb_desc;
+
+				uint16_t num_samplers;
+				uint16_t num_srvs;
+				uint16_t num_uavs;
+
+				struct BoundResourceDesc
+				{
+					std::string name;
+					uint8_t type;
+					uint8_t dimension;
+					uint16_t bind_point;
+				};
+				std::vector<BoundResourceDesc> res_desc;
+			};
+#ifdef KLAYGE_HAS_STRUCT_PACK
+#pragma pack(pop)
+#endif
+
+			std::array<std::pair<std::shared_ptr<std::vector<uint8_t>>, std::string>, ST_NumShaderTypes> shader_code_;
+			std::array<std::shared_ptr<D3D11ShaderDesc>, ST_NumShaderTypes> shader_desc_;
+			std::array<std::shared_ptr<std::vector<uint8_t>>, ST_NumShaderTypes> cbuff_indices_;
+
+			uint32_t vs_signature_;
+		};
+
+	public:
+		explicit NullShaderObject(std::shared_ptr<D3D11ShaderObjectTemplate> const & so_template);
+
+	private:
+		std::shared_ptr<std::vector<uint8_t>> CompiteToBytecode(ShaderType type, RenderEffect const & effect,
+			RenderTechnique const & tech, RenderPass const & pass, std::array<uint32_t, ST_NumShaderTypes> const & shader_desc_ids);
+		void AttachShaderBytecode(ShaderType type, RenderEffect const & effect,
+			std::array<uint32_t, ST_NumShaderTypes> const & shader_desc_ids, std::shared_ptr<std::vector<uint8_t>> const & code_blob);
+	private:
+		std::shared_ptr<D3D11ShaderObjectTemplate> so_template_;
 	};
 }
 
-#endif			// _KLAYGE_PLUGINS_NULL_SHADER_OBJECT_HPP
+#endif			// KLAYGE_PLUGINS_NULL_SHADER_OBJECT_HPP

@@ -28,8 +28,8 @@
  * from http://www.klayge.org/licensing/.
  */
 
-#ifndef _KLAYGE_PLUGINS_NULL_RENDER_ENGINE_HPP
-#define _KLAYGE_PLUGINS_NULL_RENDER_ENGINE_HPP
+#ifndef KLAYGE_PLUGINS_NULL_RENDER_ENGINE_HPP
+#define KLAYGE_PLUGINS_NULL_RENDER_ENGINE_HPP
 
 #pragma once
 
@@ -91,7 +91,6 @@ namespace KlayGE
 		bool UAVFormatSupport(ElementFormat elem_fmt);
 
 	private:
-		std::string platform_;
 		uint8_t major_version_;
 		uint8_t minor_version_;
 		bool requires_flipping_;
@@ -103,4 +102,4 @@ namespace KlayGE
 	};
 }
 
-#endif			// _KLAYGE_PLUGINS_NULL_RENDER_ENGINE_HPP
+#endif			// KLAYGE_PLUGINS_NULL_RENDER_ENGINE_HPP
