@@ -540,7 +540,6 @@ namespace KlayGE
 					case ST_GeometryShader:
 						if (!caps.gs_support)
 						{
-	   
 							is_shader_validate_[type] = false;
 						}
 						break;

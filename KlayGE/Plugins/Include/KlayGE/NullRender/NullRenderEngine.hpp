@@ -69,6 +69,31 @@ namespace KlayGE
 		bool FullScreen() const override;
 		void FullScreen(bool fs) override;
 
+		char const * VertexShaderProfile() const
+		{
+			return vs_profile_.c_str();
+		}
+		char const * PixelShaderProfile() const
+		{
+			return ps_profile_.c_str();
+		}
+		char const * GeometryShaderProfile() const
+		{
+			return gs_profile_.c_str();
+		}
+		char const * ComputeShaderProfile() const
+		{
+			return cs_profile_.c_str();
+		}
+		char const * HullShaderProfile() const
+		{
+			return hs_profile_.c_str();
+		}
+		char const * DomainShaderProfile() const
+		{
+			return ds_profile_.c_str();
+		}
+
 	private:
 		void DoCreateRenderWindow(std::string const & name, RenderSettings const & settings) override;
 		void DoBindFrameBuffer(FrameBufferPtr const & fb) override;
@@ -99,6 +124,13 @@ namespace KlayGE
 		std::vector<ElementFormat> texture_format_;
 		std::map<ElementFormat, std::vector<std::pair<uint32_t, uint32_t>>> rendertarget_format_;
 		std::vector<ElementFormat> uav_format_;
+
+		std::string vs_profile_;
+		std::string ps_profile_;
+		std::string gs_profile_;
+		std::string cs_profile_;
+		std::string hs_profile_;
+		std::string ds_profile_;
 	};
 }
 

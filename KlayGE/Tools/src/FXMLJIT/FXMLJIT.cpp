@@ -199,9 +199,11 @@ int main(int argc, char* argv[])
 	//TODO: frag_depth_support
 
 	RenderEngine& re = Context::Instance().RenderFactoryInstance().RenderEngineInstance();
+	int major_version = caps.major_version;
+	int minor_version = caps.minor_version;
 	re.SetCustomAttrib("PLATFORM", &caps.platform);
-	re.SetCustomAttrib("MAJOR_VERSION", &caps.major_version);
-	re.SetCustomAttrib("MINOR_VERSION", &caps.minor_version);
+	re.SetCustomAttrib("MAJOR_VERSION", &major_version);
+	re.SetCustomAttrib("MINOR_VERSION", &minor_version);
 	re.SetCustomAttrib("NATIVE_SHADER_FOURCC", &caps.native_shader_fourcc);
 	re.SetCustomAttrib("NATIVE_SHADER_VERSION", &caps.native_shader_version);
 	re.SetCustomAttrib("TEXTURE_FORMAT", &texture_format);

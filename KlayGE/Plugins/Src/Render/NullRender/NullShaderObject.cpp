@@ -83,6 +83,9 @@ namespace KlayGE
 
 	void NullShaderObject::StreamOut(std::ostream& os, ShaderType type)
 	{
+		// D3D11ShaderObject::StreamOut
+		// D3D12ShaderObject::StreamOut
+
 		std::ostringstream oss(std::ios_base::binary | std::ios_base::out);
 
 		{
@@ -187,6 +190,8 @@ namespace KlayGE
 		RenderEffect const & effect, RenderTechnique const & tech, RenderPass const & pass,
 		std::array<uint32_t, ST_NumShaderTypes> const & shader_desc_ids)
 	{
+		// D3D11ShaderObject::CompiteToBytecode
+
 #ifdef KLAYGE_PLATFORM_WINDOWS_DESKTOP
 		auto const & re = *checked_cast<NullRenderEngine const *>(&Context::Instance().RenderFactoryInstance().RenderEngineInstance());
 		auto const & caps = re.DeviceCaps();
@@ -202,14 +207,14 @@ namespace KlayGE
 		case ST_VertexShader:
 			if (CT_HASH("auto") == shader_profile_hash)
 			{
-				shader_profile = "vs_5_0";//re.VertexShaderProfile();
+				shader_profile = re.VertexShaderProfile();
 			}
 			break;
 
 		case ST_PixelShader:
 			if (CT_HASH("auto") == shader_profile_hash)
 			{
-				shader_profile = "ps_5_0";//re.PixelShaderProfile();
+				shader_profile = re.PixelShaderProfile();
 			}
 			break;
 
@@ -218,7 +223,7 @@ namespace KlayGE
 			{
 				if (CT_HASH("auto") == shader_profile_hash)
 				{
-					shader_profile = "gs_5_0";//re.GeometryShaderProfile();
+					shader_profile = re.GeometryShaderProfile();
 				}
 			}
 			else
@@ -232,7 +237,7 @@ namespace KlayGE
 			{
 				if (CT_HASH("auto") == shader_profile_hash)
 				{
-					shader_profile = "cs_5_0";//re.ComputeShaderProfile();
+					shader_profile = re.ComputeShaderProfile();
 				}
 				if ((CT_HASH("cs_5_0") == shader_profile_hash) && (caps.max_shader_model < ShaderModel(5, 0)))
 				{
@@ -250,7 +255,7 @@ namespace KlayGE
 			{
 				if (CT_HASH("auto") == shader_profile_hash)
 				{
-					shader_profile = "hs_5_0";//re.HullShaderProfile();
+					shader_profile = re.HullShaderProfile();
 				}
 			}
 			else
@@ -264,7 +269,7 @@ namespace KlayGE
 			{
 				if (CT_HASH("auto") == shader_profile_hash)
 				{
-					shader_profile = "ds_5_0";//re.DomainShaderProfile();
+					shader_profile = re.DomainShaderProfile();
 				}
 			}
 			else
@@ -283,7 +288,14 @@ namespace KlayGE
 		if (is_shader_validate_[type])
 		{
 			std::vector<std::pair<char const *, char const *>> macros;
-			macros.emplace_back("KLAYGE_D3D11", "1");
+			if (re.NativeShaderPlatformName().find("d3d_11") == 0)
+			{
+				macros.emplace_back("KLAYGE_D3D11", "1");
+			}
+			else if (re.NativeShaderPlatformName().find("d3d_12") == 0)
+			{
+				macros.emplace_back("KLAYGE_D3D12", "1");
+			}
 			macros.emplace_back("KLAYGE_FRAG_DEPTH", "1");
 
 			uint32_t flags = D3DCOMPILE_ENABLE_STRICTNESS;
@@ -469,6 +481,9 @@ namespace KlayGE
 	void NullShaderObject::AttachShaderBytecode(ShaderType type, RenderEffect const & effect,
 		std::array<uint32_t, ST_NumShaderTypes> const & shader_desc_ids, std::shared_ptr<std::vector<uint8_t>> const & code_blob)
 	{
+		// Simplified D3D11ShaderObject::AttachShaderBytecode
+		// Simplified D3D12ShaderObject::AttachShaderBytecode
+
 		if (code_blob)
 		{
 			RenderFactory& rf = Context::Instance().RenderFactoryInstance();
@@ -485,6 +500,8 @@ namespace KlayGE
 			}
 			else
 			{
+				so_template_->shader_code_[type].first = code_blob;
+
 				switch (type)
 				{
 				case ST_VertexShader:
@@ -495,42 +512,27 @@ namespace KlayGE
 							is_shader_validate_[type] = false;
 						}
 					}
-
-					so_template_->shader_code_[type].first = code_blob;
 					break;
 
 				case ST_PixelShader:
-					so_template_->shader_code_[type].first = code_blob;
 					break;
 
 				case ST_GeometryShader:
-					if (caps.gs_support)
-					{
-						so_template_->shader_code_[type].first = code_blob;
-					}
-					else
+					if (!caps.gs_support)
 					{
 						is_shader_validate_[type] = false;
 					}
 					break;
 
 				case ST_ComputeShader:
-					if (caps.cs_support)
-					{
-						so_template_->shader_code_[type].first = code_blob;
-					}
-					else
+					if (!caps.cs_support)
 					{
 						is_shader_validate_[type] = false;
 					}
 					break;
 
 				case ST_HullShader:
-					if (caps.hs_support)
-					{
-						so_template_->shader_code_[type].first = code_blob;
-					}
-					else
+					if (!caps.hs_support)
 					{
 						is_shader_validate_[type] = false;
 					}
@@ -546,8 +548,6 @@ namespace KlayGE
 								is_shader_validate_[type] = false;
 							}
 						}
-
-						so_template_->shader_code_[type].first = code_blob;
 					}
 					else
 					{
@@ -589,6 +589,9 @@ namespace KlayGE
 	void NullShaderObject::AttachShader(ShaderType type, RenderEffect const & effect,
 			RenderTechnique const & tech, RenderPass const & pass, std::array<uint32_t, ST_NumShaderTypes> const & shader_desc_ids)
 	{
+		// D3D11ShaderObject::AttachShader
+		// D3D12ShaderObject::AttachShader
+
 		std::shared_ptr<std::vector<uint8_t>> code_blob = this->CompiteToBytecode(type, effect, tech, pass, shader_desc_ids);
 		this->AttachShaderBytecode(type, effect, shader_desc_ids, code_blob);
 	}
@@ -596,6 +599,9 @@ namespace KlayGE
 	void NullShaderObject::AttachShader(ShaderType type, RenderEffect const & effect,
 			RenderTechnique const & tech, RenderPass const & pass, ShaderObjectPtr const & shared_so)
 	{
+		// Simplified D3D11ShaderObject::AttachShader
+		// Simplified D3D12ShaderObject::AttachShader
+
 		KFL_UNUSED(effect);
 		KFL_UNUSED(tech);
 		KFL_UNUSED(pass);
@@ -644,8 +650,11 @@ namespace KlayGE
 	{
 		KFL_UNUSED(effect);
 
+		// Simplified D3D11ShaderObject::LinkShaders
+		// Simplified D3D12ShaderObject::LinkShaders
+
 		is_validate_ = true;
-		for (size_t type = 0; type < ShaderObject::ST_NumShaderTypes; ++ type)
+		for (size_t type = 0; type < ST_NumShaderTypes; ++ type)
 		{
 			is_validate_ &= is_shader_validate_[type];
 		}

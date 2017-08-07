@@ -29,7 +29,14 @@
  */
 
 #include <KlayGE/KlayGE.hpp>
+#include <KFL/ErrorHandling.hpp>
 #include <KFL/Hash.hpp>
+
+#ifdef KLAYGE_PLATFORM_WINDOWS_DESKTOP
+#include <KlayGE/SALWrapper.hpp>
+#include <d3dcompiler.h>
+#include <d3d11shader.h>
+#endif
 
 #include <KlayGE/NullRender/NullRenderEngine.hpp>
 
@@ -93,6 +100,29 @@ namespace KlayGE
 		if (CT_HASH("PLATFORM") == name_hash)
 		{
 			native_shader_platform_name_ = *static_cast<std::string*>(value);
+
+			if (native_shader_platform_name_.find("d3d_11") == 0)
+			{
+				vs_profile_ = "vs_5_0";
+				ps_profile_ = "ps_5_0";
+				gs_profile_ = "gs_5_0";
+				cs_profile_ = "cs_5_0";
+				hs_profile_ = "hs_5_0";
+				ds_profile_ = "ds_5_0";
+			}
+			else if (native_shader_platform_name_.find("d3d_12") == 0)
+			{
+				vs_profile_ = "vs_5_1";
+				ps_profile_ = "ps_5_1";
+				gs_profile_ = "gs_5_1";
+				cs_profile_ = "cs_5_1";
+				hs_profile_ = "hs_5_1";
+				ds_profile_ = "ds_5_1";
+			}
+			else
+			{
+				KFL_UNREACHABLE("Invalid feature level");
+			}
 		}
 		else if (CT_HASH("MAJOR_VERSION") == name_hash)
 		{
