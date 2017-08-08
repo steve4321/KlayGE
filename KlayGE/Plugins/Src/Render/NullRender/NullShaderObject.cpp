@@ -774,11 +774,12 @@ namespace KlayGE
 		}
 	}
 
-	// OpenGL
+	// OpenGL/OpenGLES
 
 	void NullShaderObject::OGLStreamOut(std::ostream& os, ShaderType type)
 	{
 		// OGLShaderObject::StreamOut
+		// OGLESShaderObject::StreamOut
 
 		auto ogl_so_template = checked_cast<OGLShaderObjectTemplate*>(so_template_.get());
 
@@ -891,6 +892,9 @@ namespace KlayGE
 	void NullShaderObject::OGLAttachShader(ShaderType type, RenderEffect const & effect,
 		RenderTechnique const & tech, RenderPass const & pass, std::array<uint32_t, ST_NumShaderTypes> const & shader_desc_ids)
 	{
+		// OGLShaderObject::AttachShader
+		// OGLESShaderObject::AttachShader
+
 		auto ogl_so_template = checked_cast<OGLShaderObjectTemplate*>(so_template_.get());
 
 		ShaderDesc const & sd = effect.GetShaderDesc(shader_desc_ids[type]);
@@ -1075,8 +1079,9 @@ namespace KlayGE
 				}
 				else
 				{
-					// TODO: frag_depth_support
-					//macros.emplace_back("KLAYGE_FRAG_DEPTH", caps.frag_depth_support ? "1" : "0");
+					bool frag_depth_support;
+					re.GetCustomAttrib("FRAG_DEPTH_SUPPORT", &frag_depth_support);
+					macros.emplace_back("KLAYGE_FRAG_DEPTH", frag_depth_support ? "1" : "0");
 				}
 
 				uint32_t const flags = D3DCOMPILE_ENABLE_STRICTNESS | D3DCOMPILE_PREFER_FLOW_CONTROL | D3DCOMPILE_SKIP_OPTIMIZATION;
@@ -1387,6 +1392,9 @@ namespace KlayGE
 	void NullShaderObject::OGLAttachShader(ShaderType type, RenderEffect const & effect,
 		RenderTechnique const & tech, RenderPass const & pass, ShaderObjectPtr const & shared_so)
 	{
+		// Simplified OGLShaderObject::AttachShader
+		// Simplified OGLESShaderObject::AttachShader
+
 		KFL_UNUSED(effect);
 		KFL_UNUSED(tech);
 		KFL_UNUSED(pass);
@@ -1450,6 +1458,9 @@ namespace KlayGE
 
 	void NullShaderObject::OGLLinkShaders(RenderEffect const & effect)
 	{
+		// Simplified OGLShaderObject::LinkShaders
+		// Simplified OGLESShaderObject::LinkShaders
+
 		KFL_UNUSED(effect);
 
 		auto ogl_so_template = checked_cast<OGLShaderObjectTemplate*>(so_template_.get());

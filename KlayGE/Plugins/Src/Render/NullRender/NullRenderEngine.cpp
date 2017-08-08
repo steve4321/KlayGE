@@ -92,6 +92,10 @@ namespace KlayGE
 		{
 			*static_cast<uint32_t*>(value) = minor_version_;
 		}
+		else if (CT_HASH("FRAG_DEPTH_SUPPORT") == name_hash)
+		{
+			*static_cast<bool*>(value) = frag_depth_support_;
+		}
 	}
 
 	void NullRenderEngine::SetCustomAttrib(std::string_view name, void* value)
@@ -167,6 +171,10 @@ namespace KlayGE
 		else if (CT_HASH("DEVICE_CAPS") == name_hash)
 		{
 			caps_ = *static_cast<RenderDeviceCaps*>(value);
+		}
+		else if (CT_HASH("FRAG_DEPTH_SUPPORT") == name_hash)
+		{
+			frag_depth_support_ = *static_cast<bool*>(value);
 		}
 	}
 

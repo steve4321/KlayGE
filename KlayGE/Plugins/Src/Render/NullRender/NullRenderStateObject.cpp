@@ -36,7 +36,7 @@
 
 namespace KlayGE
 {
-    NullRenderStateObject::NullRenderStateObject(RasterizerStateDesc const & rs_desc, DepthStencilStateDesc const & dss_desc,
+	NullRenderStateObject::NullRenderStateObject(RasterizerStateDesc const & rs_desc, DepthStencilStateDesc const & dss_desc,
 			BlendStateDesc const & bs_desc)
 		: RenderStateObject(rs_desc, dss_desc, bs_desc)
 	{
@@ -47,7 +47,7 @@ namespace KlayGE
 	}
 
 
-    NullSamplerStateObject::NullSamplerStateObject(SamplerStateDesc const & desc)
+	NullSamplerStateObject::NullSamplerStateObject(SamplerStateDesc const & desc)
 		: SamplerStateObject(desc)
 	{
 	}

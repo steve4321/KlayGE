@@ -369,12 +369,12 @@ namespace KlayGE
 	RenderStateObjectPtr NullRenderFactory::DoMakeRenderStateObject(RasterizerStateDesc const & rs_desc,
 		DepthStencilStateDesc const & dss_desc, BlendStateDesc const & bs_desc)
 	{
-        return MakeSharedPtr<NullRenderStateObject>(rs_desc, dss_desc, bs_desc);
+		return MakeSharedPtr<NullRenderStateObject>(rs_desc, dss_desc, bs_desc);
 	}
 
 	SamplerStateObjectPtr NullRenderFactory::DoMakeSamplerStateObject(SamplerStateDesc const & desc)
 	{
-        return MakeSharedPtr<NullSamplerStateObject>(desc);
+		return MakeSharedPtr<NullSamplerStateObject>(desc);
 	}
 
 	void NullRenderFactory::DoSuspend()

@@ -119,6 +119,7 @@ namespace KlayGE
 		uint8_t major_version_;
 		uint8_t minor_version_;
 		bool requires_flipping_;
+		bool frag_depth_support_;
 
 		std::vector<ElementFormat> vertex_format_;
 		std::vector<ElementFormat> texture_format_;

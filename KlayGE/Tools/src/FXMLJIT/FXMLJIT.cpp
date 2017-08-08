@@ -198,11 +198,11 @@ int main(int argc, char* argv[])
 		texture_format.push_back(EF_BC5);
 		texture_format.push_back(EF_BC5_SRGB);
 	}
-	//TODO: frag_depth_support
 
 	RenderEngine& re = Context::Instance().RenderFactoryInstance().RenderEngineInstance();
 	int major_version = caps.major_version;
 	int minor_version = caps.minor_version;
+	bool frag_depth_support = caps.frag_depth_support;
 	re.SetCustomAttrib("PLATFORM", &caps.platform);
 	re.SetCustomAttrib("MAJOR_VERSION", &major_version);
 	re.SetCustomAttrib("MINOR_VERSION", &minor_version);
@@ -211,6 +211,7 @@ int main(int argc, char* argv[])
 	re.SetCustomAttrib("REQUIRES_FLIPPING", &caps.requires_flipping);
 	re.SetCustomAttrib("DEVICE_CAPS", &device_caps);
 	re.SetCustomAttrib("TEXTURE_FORMAT", &texture_format);
+	re.SetCustomAttrib("FRAG_DEPTH_SUPPORT", &frag_depth_support);
 
 	std::string fxml_name(argv[2]);
 	filesystem::path fxml_path(fxml_name);
