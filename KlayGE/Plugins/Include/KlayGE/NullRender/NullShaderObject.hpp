@@ -156,7 +156,7 @@ namespace KlayGE
 			std::vector<VertexElementUsage> vs_usages_;
 			std::vector<uint8_t> vs_usage_indices_;
 			std::vector<std::string> glsl_vs_attrib_names_;
-			int32_t gs_input_type_, gs_output_type_, gs_max_output_vertex_;
+			int32_t gs_input_type_, gs_output_type_, gs_max_output_vertex_;	// Only in GL
 			uint32_t ds_partitioning_, ds_output_primitive_;
 		};
 
@@ -178,6 +178,9 @@ namespace KlayGE
 		void OGLAttachShader(ShaderType type, RenderEffect const & effect,
 			RenderTechnique const & tech, RenderPass const & pass, ShaderObjectPtr const & shared_so);
 		void OGLLinkShaders(RenderEffect const & effect);
+
+		void OGLESAttachShader(ShaderType type, RenderEffect const & effect,
+			RenderTechnique const & tech, RenderPass const & pass, ShaderObjectPtr const & shared_so);
 
 		std::shared_ptr<std::vector<uint8_t>> D3D11CompiteToBytecode(ShaderType type, RenderEffect const & effect,
 			RenderTechnique const & tech, RenderPass const & pass, std::array<uint32_t, ST_NumShaderTypes> const & shader_desc_ids);

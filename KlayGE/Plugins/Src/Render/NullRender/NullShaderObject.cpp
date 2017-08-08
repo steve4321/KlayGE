@@ -124,7 +124,7 @@ namespace KlayGE
 		{
 			this->D3D11StreamOut(os, type);
 		}
-		else if (so_template_->as_gl_)
+		else if (so_template_->as_gl_ || so_template_->as_gles_)
 		{
 			this->OGLStreamOut(os, type);
 		}
@@ -137,7 +137,7 @@ namespace KlayGE
 		{
 			this->D3D11AttachShader(type, effect, tech, pass, shader_desc_ids);
 		}
-		else if (so_template_->as_gl_)
+		else if (so_template_->as_gl_ || so_template_->as_gles_)
 		{
 			this->OGLAttachShader(type, effect, tech, pass, shader_desc_ids);
 		}
@@ -150,7 +150,7 @@ namespace KlayGE
 		{
 			this->D3D11AttachShader(type, effect, tech, pass, shared_so);
 		}
-		else if (so_template_->as_gl_)
+		else if (so_template_->as_gl_ || so_template_->as_gles_)
 		{
 			this->OGLAttachShader(type, effect, tech, pass, shared_so);
 		}
@@ -162,7 +162,7 @@ namespace KlayGE
 		{
 			this->D3D11LinkShaders(effect);
 		}
-		else if (so_template_->as_gl_)
+		else if (so_template_->as_gl_ || so_template_->as_gles_)
 		{
 			this->OGLLinkShaders(effect);
 		}
@@ -400,8 +400,9 @@ namespace KlayGE
 			{
 				macros.emplace_back("KLAYGE_D3D11", "1");
 			}
-			else if (so_template_->as_d3d12_)
+			else
 			{
+				BOOST_ASSERT(so_template_->as_d3d12_);
 				macros.emplace_back("KLAYGE_D3D12", "1");
 			}
 			macros.emplace_back("KLAYGE_FRAG_DEPTH", "1");
@@ -897,9 +898,12 @@ namespace KlayGE
 		ogl_so_template->shader_func_names_[type] = sd.func_name;
 
 		bool has_gs = false;
-		if (!effect.GetShaderDesc(shader_desc_ids[ST_GeometryShader]).func_name.empty())
+		if (so_template_->as_gl_)
 		{
-			has_gs = true;
+			if (!effect.GetShaderDesc(shader_desc_ids[ST_GeometryShader]).func_name.empty())
+			{
+				has_gs = true;
+			}
 		}
 		bool has_ps = false;
 		if (!effect.GetShaderDesc(shader_desc_ids[ST_PixelShader]).func_name.empty())
@@ -912,10 +916,21 @@ namespace KlayGE
 		{
 		case ST_VertexShader:
 		case ST_PixelShader:
-		case ST_GeometryShader:
 		case ST_HullShader:
 		case ST_DomainShader:
 			break;
+
+		case ST_GeometryShader:
+			if (so_template_->as_gl_)
+			{
+				break;
+			}
+			else
+			{
+				BOOST_ASSERT(so_template_->as_gles_);
+				is_shader_validate_[type] = false;
+				break;
+			}
 
 		default:
 			is_shader_validate_[type] = false;
@@ -1022,16 +1037,47 @@ namespace KlayGE
 				std::string err_msg;
 				std::vector<std::pair<char const *, char const *>> macros;
 				macros.emplace_back("KLAYGE_DXBC2GLSL", "1");
-				macros.emplace_back("KLAYGE_OPENGL", "1");
-				if (!caps.texture_format_support(EF_BC5) || !caps.texture_format_support(EF_BC5_SRGB))
+				if (so_template_->as_gl_)
 				{
-					macros.emplace_back("KLAYGE_BC5_AS_AG", "1");
+					macros.emplace_back("KLAYGE_OPENGL", "1");
+				}
+				else
+				{
+					BOOST_ASSERT(so_template_->as_gles_);
+					macros.emplace_back("KLAYGE_OPENGLES", "1");
+				}
+				if (so_template_->as_gl_)
+				{
+					if (!caps.texture_format_support(EF_BC5) || !caps.texture_format_support(EF_BC5_SRGB))
+					{
+						macros.emplace_back("KLAYGE_BC5_AS_AG", "1");
+					}
+				}
+				else
+				{
+					BOOST_ASSERT(so_template_->as_gles_);
+					if (!caps.texture_format_support(EF_BC5) || !caps.texture_format_support(EF_BC5_SRGB))
+					{
+						macros.emplace_back("KLAYGE_BC5_AS_AG", "1");
+					}
+					else
+					{
+						macros.emplace_back("KLAYGE_BC5_AS_GA", "1");
+					}
 				}
 				if (!caps.texture_format_support(EF_BC4) || !caps.texture_format_support(EF_BC4_SRGB))
 				{
 					macros.emplace_back("KLAYGE_BC4_AS_G", "1");
 				}
-				macros.emplace_back("KLAYGE_FRAG_DEPTH", "1");
+				if (so_template_->as_gl_)
+				{
+					macros.emplace_back("KLAYGE_FRAG_DEPTH", "1");
+				}
+				else
+				{
+					// TODO: frag_depth_support
+					//macros.emplace_back("KLAYGE_FRAG_DEPTH", caps.frag_depth_support ? "1" : "0");
+				}
 
 				uint32_t const flags = D3DCOMPILE_ENABLE_STRICTNESS | D3DCOMPILE_PREFER_FLOW_CONTROL | D3DCOMPILE_SKIP_OPTIMIZATION;
 				code = this->CompileToDXBC(type, effect, tech, pass, macros, sd.func_name.c_str(), shader_profile, flags);
@@ -1044,43 +1090,82 @@ namespace KlayGE
 					try
 					{
 						GLSLVersion gsv;
-						switch (major_version)
+						if (so_template_->as_gl_)
 						{
-						case 4:
-							switch (minor_version)
+							switch (major_version)
 							{
-							case 5:
-								gsv = GSV_450;
-								break;
-
 							case 4:
-								gsv = GSV_440;
-								break;
+								switch (minor_version)
+								{
+								case 5:
+									gsv = GSV_450;
+									break;
 
-							case 3:
-								gsv = GSV_430;
-								break;
+								case 4:
+									gsv = GSV_440;
+									break;
 
-							case 2:
-								gsv = GSV_420;
-								break;
+								case 3:
+									gsv = GSV_430;
+									break;
 
-							case 1:
-								gsv = GSV_410;
+								case 2:
+									gsv = GSV_420;
+									break;
+
+								case 1:
+									gsv = GSV_410;
+									break;
+
+								default:
+									KFL_UNREACHABLE("Invalid OpenGL 4 sub-version");
+								}
 								break;
 
 							default:
-								KFL_UNREACHABLE("Invalid OpenGL 4 sub-version");
+								KFL_UNREACHABLE("Invalid OpenGL version");
 							}
-							break;
+						}
+						else
+						{
+							switch (major_version)
+							{
+							case 3:
+								switch (minor_version)
+								{
+								case 2:
+									gsv = GSV_320_ES;
+									break;
 
-						default:
-							KFL_UNREACHABLE("Invalid OpenGL version");
+								case 1:
+									gsv = GSV_310_ES;
+									break;
+
+								default:
+								case 0:
+									gsv = GSV_300_ES;
+									break;
+								}
+								break;
+
+							default:
+								KFL_UNREACHABLE("Invalid OpenGLES version");
+							}
 						}
 
 						DXBC2GLSL::DXBC2GLSL dxbc2glsl;
 						uint32_t rules = DXBC2GLSL::DXBC2GLSL::DefaultRules(gsv);
 						rules &= ~GSR_UniformBlockBinding;
+						if (so_template_->as_gles_)
+						{
+							rules &= ~GSR_MatrixType;
+							rules &= ~GSR_UIntType;
+							rules |= caps.max_simultaneous_rts > 1 ? static_cast<uint32_t>(GSR_DrawBuffers) : 0;
+							if ((ST_HullShader == type) || (ST_DomainShader == type))
+							{
+								rules |= static_cast<uint32_t>(GSR_EXTTessellationShader);
+							}
+						}
 						dxbc2glsl.FeedDXBC(&code[0],
 							has_gs, has_ps, static_cast<ShaderTessellatorPartitioning>(ogl_so_template->ds_partitioning_),
 							static_cast<ShaderTessellatorOutputPrimitive>(ogl_so_template->ds_output_primitive_),
@@ -1222,7 +1307,7 @@ namespace KlayGE
 										}
 										else
 										{
-											KFL_UNREACHABLE("Invalid sementic");
+											KFL_UNREACHABLE("Invalid semantic");
 										}
 
 										ogl_so_template->vs_usages_.push_back(usage);
@@ -1299,9 +1384,13 @@ namespace KlayGE
 		}
 	}
 
-	void NullShaderObject::OGLAttachShader(ShaderType type, RenderEffect const & /*effect*/,
-		RenderTechnique const & /*tech*/, RenderPass const & /*pass*/, ShaderObjectPtr const & shared_so)
+	void NullShaderObject::OGLAttachShader(ShaderType type, RenderEffect const & effect,
+		RenderTechnique const & tech, RenderPass const & pass, ShaderObjectPtr const & shared_so)
 	{
+		KFL_UNUSED(effect);
+		KFL_UNUSED(tech);
+		KFL_UNUSED(pass);
+
 		auto so = checked_cast<NullShaderObject*>(shared_so.get());
 
 		auto ogl_so_template = checked_cast<OGLShaderObjectTemplate*>(so_template_.get());

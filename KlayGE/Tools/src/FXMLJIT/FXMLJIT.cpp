@@ -191,10 +191,12 @@ int main(int argc, char* argv[])
 	if (caps.bc4_support)
 	{
 		texture_format.push_back(EF_BC4);
+		texture_format.push_back(EF_BC4_SRGB);
 	}
 	if (caps.bc5_support)
 	{
 		texture_format.push_back(EF_BC5);
+		texture_format.push_back(EF_BC5_SRGB);
 	}
 	//TODO: frag_depth_support
 
@@ -206,6 +208,7 @@ int main(int argc, char* argv[])
 	re.SetCustomAttrib("MINOR_VERSION", &minor_version);
 	re.SetCustomAttrib("NATIVE_SHADER_FOURCC", &caps.native_shader_fourcc);
 	re.SetCustomAttrib("NATIVE_SHADER_VERSION", &caps.native_shader_version);
+	re.SetCustomAttrib("REQUIRES_FLIPPING", &caps.requires_flipping);
 	re.SetCustomAttrib("DEVICE_CAPS", &device_caps);
 	re.SetCustomAttrib("TEXTURE_FORMAT", &texture_format);
 
