@@ -81,7 +81,7 @@ namespace KlayGE
 		KFL_UNUSED(height);
 	}
 
-	void NullRenderEngine::GetCustomAttrib(std::string_view name, void* value)
+	void NullRenderEngine::GetCustomAttrib(std::string_view name, void* value) const
 	{
 		size_t const name_hash = HashRange(name.begin(), name.end());
 		if (CT_HASH("MAJOR_VERSION") == name_hash)

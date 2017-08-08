@@ -62,8 +62,28 @@ namespace KlayGE
 		void Unbind() override;
 
 	private:
-		struct D3D11ShaderObjectTemplate
+		struct NullShaderObjectTemplate
 		{
+			NullShaderObjectTemplate()
+				: as_d3d11_(false), as_d3d12_(false), as_gl_(false), as_gles_(false)
+			{
+			}
+			virtual ~NullShaderObjectTemplate()
+			{
+			}
+
+			bool as_d3d11_;
+			bool as_d3d12_;
+			bool as_gl_;
+			bool as_gles_;
+		};
+
+		struct D3D11ShaderObjectTemplate : public NullShaderObjectTemplate
+		{
+			~D3D11ShaderObjectTemplate() override
+			{
+			}
+
 #ifdef KLAYGE_HAS_STRUCT_PACK
 #pragma pack(push, 2)
 #endif
@@ -122,16 +142,51 @@ namespace KlayGE
 			uint32_t vs_signature_;
 		};
 
+		struct OGLShaderObjectTemplate : public NullShaderObjectTemplate
+		{
+			OGLShaderObjectTemplate();
+			~OGLShaderObjectTemplate() override
+			{
+			}
+
+			std::array<std::string, ST_NumShaderTypes> shader_func_names_;
+			std::array<std::shared_ptr<std::string>, ST_NumShaderTypes> glsl_srcs_;
+			std::array<std::shared_ptr<std::vector<std::string>>, ST_NumShaderTypes> pnames_;
+			std::array<std::shared_ptr<std::vector<std::string>>, ST_NumShaderTypes> glsl_res_names_;
+			std::vector<VertexElementUsage> vs_usages_;
+			std::vector<uint8_t> vs_usage_indices_;
+			std::vector<std::string> glsl_vs_attrib_names_;
+			int32_t gs_input_type_, gs_output_type_, gs_max_output_vertex_;
+			uint32_t ds_partitioning_, ds_output_primitive_;
+		};
+
 	public:
-		explicit NullShaderObject(std::shared_ptr<D3D11ShaderObjectTemplate> const & so_template);
+		explicit NullShaderObject(std::shared_ptr<NullShaderObjectTemplate> const & so_template);
 
 	private:
-		std::shared_ptr<std::vector<uint8_t>> CompiteToBytecode(ShaderType type, RenderEffect const & effect,
+		void D3D11StreamOut(std::ostream& os, ShaderType type);
+		void D3D11AttachShader(ShaderType type, RenderEffect const & effect,
+			RenderTechnique const & tech, RenderPass const & pass,
+			std::array<uint32_t, ST_NumShaderTypes> const & shader_desc_ids);
+		void D3D11AttachShader(ShaderType type, RenderEffect const & effect,
+			RenderTechnique const & tech, RenderPass const & pass, ShaderObjectPtr const & shared_so);
+		void D3D11LinkShaders(RenderEffect const & effect);
+
+		void OGLStreamOut(std::ostream& os, ShaderType type);
+		void OGLAttachShader(ShaderType type, RenderEffect const & effect,
 			RenderTechnique const & tech, RenderPass const & pass, std::array<uint32_t, ST_NumShaderTypes> const & shader_desc_ids);
-		void AttachShaderBytecode(ShaderType type, RenderEffect const & effect,
+		void OGLAttachShader(ShaderType type, RenderEffect const & effect,
+			RenderTechnique const & tech, RenderPass const & pass, ShaderObjectPtr const & shared_so);
+		void OGLLinkShaders(RenderEffect const & effect);
+
+		std::shared_ptr<std::vector<uint8_t>> D3D11CompiteToBytecode(ShaderType type, RenderEffect const & effect,
+			RenderTechnique const & tech, RenderPass const & pass, std::array<uint32_t, ST_NumShaderTypes> const & shader_desc_ids);
+		void D3D11AttachShaderBytecode(ShaderType type, RenderEffect const & effect,
 			std::array<uint32_t, ST_NumShaderTypes> const & shader_desc_ids, std::shared_ptr<std::vector<uint8_t>> const & code_blob);
 	private:
-		std::shared_ptr<D3D11ShaderObjectTemplate> so_template_;
+		std::shared_ptr<NullShaderObjectTemplate> so_template_;
+
+		std::vector<std::tuple<std::string, RenderEffectParameter*, RenderEffectParameter*, uint32_t>> gl_tex_sampler_binds_;
 	};
 }
 

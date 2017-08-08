@@ -63,7 +63,7 @@ namespace KlayGE
 
 		void ScissorRect(uint32_t x, uint32_t y, uint32_t width, uint32_t height) override;
 
-		void GetCustomAttrib(std::string_view name, void* value) override;
+		void GetCustomAttrib(std::string_view name, void* value) const override;
 		void SetCustomAttrib(std::string_view name, void* value) override;
 
 		bool FullScreen() const override;

@@ -206,8 +206,8 @@ int main(int argc, char* argv[])
 	re.SetCustomAttrib("MINOR_VERSION", &minor_version);
 	re.SetCustomAttrib("NATIVE_SHADER_FOURCC", &caps.native_shader_fourcc);
 	re.SetCustomAttrib("NATIVE_SHADER_VERSION", &caps.native_shader_version);
-	re.SetCustomAttrib("TEXTURE_FORMAT", &texture_format);
 	re.SetCustomAttrib("DEVICE_CAPS", &device_caps);
+	re.SetCustomAttrib("TEXTURE_FORMAT", &texture_format);
 
 	std::string fxml_name(argv[2]);
 	filesystem::path fxml_path(fxml_name);

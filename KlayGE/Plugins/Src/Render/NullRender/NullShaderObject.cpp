@@ -29,6 +29,7 @@
  */
 
 #include <KlayGE/KlayGE.hpp>
+#include <KFL/ErrorHandling.hpp>
 #include <KFL/Util.hpp>
 #include <KlayGE/Context.hpp>
 #include <KlayGE/RenderEngine.hpp>
@@ -38,22 +39,58 @@
 
 #include <sstream>
 
+#include <boost/lexical_cast.hpp>
+
+#include <glloader/glloader.h>
+
 #ifdef KLAYGE_PLATFORM_WINDOWS_DESKTOP
 #include <KlayGE/SALWrapper.hpp>
 #include <d3dcompiler.h>
 #endif
+
+#include <DXBC2GLSL/DXBC2GLSL.hpp>
 
 #include <KlayGE/NullRender/NullRenderEngine.hpp>
 #include <KlayGE/NullRender/NullShaderObject.hpp>
 
 namespace KlayGE
 {
-	NullShaderObject::NullShaderObject()
-		: NullShaderObject(MakeSharedPtr<D3D11ShaderObjectTemplate>())
+	NullShaderObject::OGLShaderObjectTemplate::OGLShaderObjectTemplate()
+		: gs_input_type_(0), gs_output_type_(0), gs_max_output_vertex_(0),
+			ds_partitioning_(STP_Undefined), ds_output_primitive_(STOP_Undefined)
 	{
 	}
+
+	NullShaderObject::NullShaderObject()
+	{
+		auto const & re = *checked_cast<NullRenderEngine const *>(&Context::Instance().RenderFactoryInstance().RenderEngineInstance());
+		if (re.NativeShaderPlatformName().find("d3d_11_") == 0)
+		{
+			so_template_ = MakeSharedPtr<D3D11ShaderObjectTemplate>();
+			so_template_->as_d3d11_ = true;
+		}
+		else if (re.NativeShaderPlatformName().find("d3d_12_") == 0)
+		{
+			so_template_ = MakeSharedPtr<D3D11ShaderObjectTemplate>();
+			so_template_->as_d3d12_ = true;
+		}
+		else if (re.NativeShaderPlatformName().find("gl_") == 0)
+		{
+			so_template_ = MakeSharedPtr<OGLShaderObjectTemplate>();
+			so_template_->as_gl_ = true;
+		}
+		else if (re.NativeShaderPlatformName().find("gles_") == 0)
+		{
+			so_template_ = MakeSharedPtr<OGLShaderObjectTemplate>();
+			so_template_->as_gles_ = true;
+		}
+
+		has_discard_ = true;
+		has_tessellation_ = false;
+		is_shader_validate_.fill(false);
+	}
 	
-	NullShaderObject::NullShaderObject(std::shared_ptr<D3D11ShaderObjectTemplate> const & so_template)
+	NullShaderObject::NullShaderObject(std::shared_ptr<NullShaderObjectTemplate> const & so_template)
 		: so_template_(so_template)
 	{
 		has_discard_ = true;
@@ -83,18 +120,86 @@ namespace KlayGE
 
 	void NullShaderObject::StreamOut(std::ostream& os, ShaderType type)
 	{
+		if (so_template_->as_d3d11_ || so_template_->as_d3d12_)
+		{
+			this->D3D11StreamOut(os, type);
+		}
+		else if (so_template_->as_gl_)
+		{
+			this->OGLStreamOut(os, type);
+		}
+	}
+
+	void NullShaderObject::AttachShader(ShaderType type, RenderEffect const & effect,
+		RenderTechnique const & tech, RenderPass const & pass, std::array<uint32_t, ST_NumShaderTypes> const & shader_desc_ids)
+	{
+		if (so_template_->as_d3d11_ || so_template_->as_d3d12_)
+		{
+			this->D3D11AttachShader(type, effect, tech, pass, shader_desc_ids);
+		}
+		else if (so_template_->as_gl_)
+		{
+			this->OGLAttachShader(type, effect, tech, pass, shader_desc_ids);
+		}
+	}
+
+	void NullShaderObject::AttachShader(ShaderType type, RenderEffect const & effect,
+		RenderTechnique const & tech, RenderPass const & pass, ShaderObjectPtr const & shared_so)
+	{
+		if (so_template_->as_d3d11_ || so_template_->as_d3d12_)
+		{
+			this->D3D11AttachShader(type, effect, tech, pass, shared_so);
+		}
+		else if (so_template_->as_gl_)
+		{
+			this->OGLAttachShader(type, effect, tech, pass, shared_so);
+		}
+	}
+
+	void NullShaderObject::LinkShaders(RenderEffect const & effect)
+	{
+		if (so_template_->as_d3d11_ || so_template_->as_d3d12_)
+		{
+			this->D3D11LinkShaders(effect);
+		}
+		else if (so_template_->as_gl_)
+		{
+			this->OGLLinkShaders(effect);
+		}
+	}
+
+	ShaderObjectPtr NullShaderObject::Clone(RenderEffect const & effect)
+	{
+		KFL_UNUSED(effect);
+		return MakeSharedPtr<NullShaderObject>();
+	}
+
+	void NullShaderObject::Bind()
+	{
+	}
+
+	void NullShaderObject::Unbind()
+	{
+	}
+	
+	// D3D11/D3D12
+
+	void NullShaderObject::D3D11StreamOut(std::ostream& os, ShaderType type)
+	{
 		// D3D11ShaderObject::StreamOut
 		// D3D12ShaderObject::StreamOut
+
+		auto d3d_so_template = checked_cast<D3D11ShaderObjectTemplate*>(so_template_.get());
 
 		std::ostringstream oss(std::ios_base::binary | std::ios_base::out);
 
 		{
-			uint8_t len = static_cast<uint8_t>(so_template_->shader_code_[type].second.size());
+			uint8_t len = static_cast<uint8_t>(d3d_so_template->shader_code_[type].second.size());
 			oss.write(reinterpret_cast<char const *>(&len), sizeof(len));
-			oss.write(reinterpret_cast<char const *>(&so_template_->shader_code_[type].second[0]), len);
+			oss.write(reinterpret_cast<char const *>(&d3d_so_template->shader_code_[type].second[0]), len);
 		}
 
-		std::shared_ptr<std::vector<uint8_t>> code_blob = so_template_->shader_code_[type].first;
+		std::shared_ptr<std::vector<uint8_t>> code_blob = d3d_so_template->shader_code_[type].first;
 		if (code_blob)
 		{
 			uint8_t len;
@@ -103,7 +208,7 @@ namespace KlayGE
 			oss.write(reinterpret_cast<char const *>(&blob_size), sizeof(blob_size));
 			oss.write(reinterpret_cast<char const *>(&((*code_blob)[0])), code_blob->size());
 
-			auto const & sd = *so_template_->shader_desc_[type];
+			auto const & sd = *d3d_so_template->shader_desc_[type];
 
 			uint16_t cb_desc_size = Native2LE(static_cast<uint16_t>(sd.cb_desc.size()));
 			oss.write(reinterpret_cast<char const *>(&cb_desc_size), sizeof(cb_desc_size));
@@ -158,7 +263,7 @@ namespace KlayGE
 
 			if (ST_VertexShader == type)
 			{
-				uint32_t vs_signature = Native2LE(so_template_->vs_signature_);
+				uint32_t vs_signature = Native2LE(d3d_so_template->vs_signature_);
 				oss.write(reinterpret_cast<char const *>(&vs_signature), sizeof(vs_signature));
 			}
 			else if (ST_ComputeShader == type)
@@ -186,11 +291,14 @@ namespace KlayGE
 		}
 	}
 
-	std::shared_ptr<std::vector<uint8_t>> NullShaderObject::CompiteToBytecode(ShaderType type,
+	std::shared_ptr<std::vector<uint8_t>> NullShaderObject::D3D11CompiteToBytecode(ShaderType type,
 		RenderEffect const & effect, RenderTechnique const & tech, RenderPass const & pass,
 		std::array<uint32_t, ST_NumShaderTypes> const & shader_desc_ids)
 	{
 		// D3D11ShaderObject::CompiteToBytecode
+		// D3D12ShaderObject::CompiteToBytecode
+
+		auto d3d_so_template = checked_cast<D3D11ShaderObjectTemplate*>(so_template_.get());
 
 #ifdef KLAYGE_PLATFORM_WINDOWS_DESKTOP
 		auto const & re = *checked_cast<NullRenderEngine const *>(&Context::Instance().RenderFactoryInstance().RenderEngineInstance());
@@ -282,17 +390,17 @@ namespace KlayGE
 			is_shader_validate_[type] = false;
 			break;
 		}
-		so_template_->shader_code_[type].second = shader_profile;
+		d3d_so_template->shader_code_[type].second = shader_profile;
 
 		std::shared_ptr<std::vector<uint8_t>> code = MakeSharedPtr<std::vector<uint8_t>>();
 		if (is_shader_validate_[type])
 		{
 			std::vector<std::pair<char const *, char const *>> macros;
-			if (re.NativeShaderPlatformName().find("d3d_11") == 0)
+			if (so_template_->as_d3d11_)
 			{
 				macros.emplace_back("KLAYGE_D3D11", "1");
 			}
-			else if (re.NativeShaderPlatformName().find("d3d_12") == 0)
+			else if (so_template_->as_d3d12_)
 			{
 				macros.emplace_back("KLAYGE_D3D12", "1");
 			}
@@ -310,9 +418,9 @@ namespace KlayGE
 				this->ReflectDXBC(*code, reinterpret_cast<void**>(&reflection));
 				if (reflection != nullptr)
 				{
-					if (!so_template_->shader_desc_[type])
+					if (!d3d_so_template->shader_desc_[type])
 					{
-						so_template_->shader_desc_[type] = MakeSharedPtr<D3D11ShaderObjectTemplate::D3D11ShaderDesc>();
+						d3d_so_template->shader_desc_[type] = MakeSharedPtr<D3D11ShaderObjectTemplate::D3D11ShaderDesc>();
 					}
 
 					D3D11_SHADER_DESC desc;
@@ -351,7 +459,7 @@ namespace KlayGE
 								cb_desc.var_desc.push_back(vd);
 							}
 
-							so_template_->shader_desc_[type]->cb_desc.push_back(cb_desc);
+							d3d_so_template->shader_desc_[type]->cb_desc.push_back(cb_desc);
 						}
 					}
 
@@ -389,9 +497,9 @@ namespace KlayGE
 						}
 					}
 
-					so_template_->shader_desc_[type]->num_samplers = static_cast<uint16_t>(max_sampler_bind_pt + 1);
-					so_template_->shader_desc_[type]->num_srvs = static_cast<uint16_t>(max_srv_bind_pt + 1);
-					so_template_->shader_desc_[type]->num_uavs = static_cast<uint16_t>(max_uav_bind_pt + 1);
+					d3d_so_template->shader_desc_[type]->num_samplers = static_cast<uint16_t>(max_sampler_bind_pt + 1);
+					d3d_so_template->shader_desc_[type]->num_srvs = static_cast<uint16_t>(max_srv_bind_pt + 1);
+					d3d_so_template->shader_desc_[type]->num_uavs = static_cast<uint16_t>(max_uav_bind_pt + 1);
 
 					for (uint32_t i = 0; i < desc.BoundResources; ++ i)
 					{
@@ -416,7 +524,7 @@ namespace KlayGE
 								brd.name = si_desc.Name;
 								brd.type = static_cast<uint8_t>(si_desc.Type);
 								brd.bind_point = static_cast<uint16_t>(si_desc.BindPoint);
-								so_template_->shader_desc_[type]->res_desc.push_back(brd);
+								d3d_so_template->shader_desc_[type]->res_desc.push_back(brd);
 							}
 							break;
 
@@ -427,7 +535,7 @@ namespace KlayGE
 
 					if (ST_VertexShader == type)
 					{
-						so_template_->vs_signature_ = 0;
+						d3d_so_template->vs_signature_ = 0;
 						D3D11_SIGNATURE_PARAMETER_DESC signature;
 						for (uint32_t i = 0; i < desc.InputParameters; ++ i)
 						{
@@ -443,9 +551,9 @@ namespace KlayGE
 							HashCombine(seed, signature.Stream);
 							HashCombine(seed, signature.MinPrecision);
 
-							size_t sig = so_template_->vs_signature_;
+							size_t sig = d3d_so_template->vs_signature_;
 							HashCombine(sig, seed);
-							so_template_->vs_signature_ = static_cast<uint32_t>(sig);
+							d3d_so_template->vs_signature_ = static_cast<uint32_t>(sig);
 						}
 					}
 					else if (ST_ComputeShader == type)
@@ -478,11 +586,13 @@ namespace KlayGE
 #endif
 	}
 
-	void NullShaderObject::AttachShaderBytecode(ShaderType type, RenderEffect const & effect,
+	void NullShaderObject::D3D11AttachShaderBytecode(ShaderType type, RenderEffect const & effect,
 		std::array<uint32_t, ST_NumShaderTypes> const & shader_desc_ids, std::shared_ptr<std::vector<uint8_t>> const & code_blob)
 	{
 		// Simplified D3D11ShaderObject::AttachShaderBytecode
 		// Simplified D3D12ShaderObject::AttachShaderBytecode
+
+		auto d3d_so_template = checked_cast<D3D11ShaderObjectTemplate*>(so_template_.get());
 
 		if (code_blob)
 		{
@@ -500,7 +610,7 @@ namespace KlayGE
 			}
 			else
 			{
-				so_template_->shader_code_[type].first = code_blob;
+				d3d_so_template->shader_code_[type].first = code_blob;
 
 				switch (type)
 				{
@@ -562,18 +672,18 @@ namespace KlayGE
 			}
 
 			// Shader reflection
-			if (!so_template_->shader_desc_[type]->cb_desc.empty())
+			if (!d3d_so_template->shader_desc_[type]->cb_desc.empty())
 			{
-				so_template_->cbuff_indices_[type] = MakeSharedPtr<std::vector<uint8_t>>(so_template_->shader_desc_[type]->cb_desc.size());
+				d3d_so_template->cbuff_indices_[type] = MakeSharedPtr<std::vector<uint8_t>>(d3d_so_template->shader_desc_[type]->cb_desc.size());
 			}
-			for (size_t c = 0; c < so_template_->shader_desc_[type]->cb_desc.size(); ++ c)
+			for (size_t c = 0; c < d3d_so_template->shader_desc_[type]->cb_desc.size(); ++ c)
 			{
 				uint32_t i = 0;
 				for (; i < effect.NumCBuffers(); ++ i)
 				{
-					if (effect.CBufferByIndex(i)->NameHash() == so_template_->shader_desc_[type]->cb_desc[c].name_hash)
+					if (effect.CBufferByIndex(i)->NameHash() == d3d_so_template->shader_desc_[type]->cb_desc[c].name_hash)
 					{
-						(*so_template_->cbuff_indices_[type])[c] = static_cast<uint8_t>(i);
+						(*d3d_so_template->cbuff_indices_[type])[c] = static_cast<uint8_t>(i);
 						break;
 					}
 				}
@@ -586,18 +696,18 @@ namespace KlayGE
 		}
 	}
 
-	void NullShaderObject::AttachShader(ShaderType type, RenderEffect const & effect,
-			RenderTechnique const & tech, RenderPass const & pass, std::array<uint32_t, ST_NumShaderTypes> const & shader_desc_ids)
+	void NullShaderObject::D3D11AttachShader(ShaderType type, RenderEffect const & effect,
+		RenderTechnique const & tech, RenderPass const & pass, std::array<uint32_t, ST_NumShaderTypes> const & shader_desc_ids)
 	{
 		// D3D11ShaderObject::AttachShader
 		// D3D12ShaderObject::AttachShader
 
-		std::shared_ptr<std::vector<uint8_t>> code_blob = this->CompiteToBytecode(type, effect, tech, pass, shader_desc_ids);
-		this->AttachShaderBytecode(type, effect, shader_desc_ids, code_blob);
+		std::shared_ptr<std::vector<uint8_t>> code_blob = this->D3D11CompiteToBytecode(type, effect, tech, pass, shader_desc_ids);
+		this->D3D11AttachShaderBytecode(type, effect, shader_desc_ids, code_blob);
 	}
 
-	void NullShaderObject::AttachShader(ShaderType type, RenderEffect const & effect,
-			RenderTechnique const & tech, RenderPass const & pass, ShaderObjectPtr const & shared_so)
+	void NullShaderObject::D3D11AttachShader(ShaderType type, RenderEffect const & effect,
+		RenderTechnique const & tech, RenderPass const & pass, ShaderObjectPtr const & shared_so)
 	{
 		// Simplified D3D11ShaderObject::AttachShader
 		// Simplified D3D12ShaderObject::AttachShader
@@ -606,17 +716,20 @@ namespace KlayGE
 		KFL_UNUSED(tech);
 		KFL_UNUSED(pass);
 
+		auto d3d_so_template = checked_cast<D3D11ShaderObjectTemplate*>(so_template_.get());
+
 		if (shared_so)
 		{
 			NullShaderObject const & so = *checked_cast<NullShaderObject*>(shared_so.get());
+			auto d3d_so_so_template = checked_cast<D3D11ShaderObjectTemplate*>(so.so_template_.get());
 
 			is_shader_validate_[type] = so.is_shader_validate_[type];
-			so_template_->shader_code_[type] = so.so_template_->shader_code_[type];
-			so_template_->shader_desc_[type] = so.so_template_->shader_desc_[type];
+			d3d_so_template->shader_code_[type] = d3d_so_so_template->shader_code_[type];
+			d3d_so_template->shader_desc_[type] = d3d_so_so_template->shader_desc_[type];
 			switch (type)
 			{
 			case ST_VertexShader:
-				so_template_->vs_signature_ = so.so_template_->vs_signature_;
+				d3d_so_template->vs_signature_ = d3d_so_so_template->vs_signature_;
 				break;
 
 			case ST_PixelShader:
@@ -642,11 +755,11 @@ namespace KlayGE
 				break;
 			}
 
-			so_template_->cbuff_indices_[type] = so.so_template_->cbuff_indices_[type];
+			d3d_so_template->cbuff_indices_[type] = d3d_so_so_template->cbuff_indices_[type];
 		}
 	}
 
-	void NullShaderObject::LinkShaders(RenderEffect const & effect)
+	void NullShaderObject::D3D11LinkShaders(RenderEffect const & effect)
 	{
 		KFL_UNUSED(effect);
 
@@ -654,23 +767,611 @@ namespace KlayGE
 		// Simplified D3D12ShaderObject::LinkShaders
 
 		is_validate_ = true;
-		for (size_t type = 0; type < ST_NumShaderTypes; ++ type)
+		for (size_t type = 0; type < ST_NumShaderTypes; ++type)
 		{
 			is_validate_ &= is_shader_validate_[type];
 		}
 	}
 
-	ShaderObjectPtr NullShaderObject::Clone(RenderEffect const & effect)
+	// OpenGL
+
+	void NullShaderObject::OGLStreamOut(std::ostream& os, ShaderType type)
+	{
+		// OGLShaderObject::StreamOut
+
+		auto ogl_so_template = checked_cast<OGLShaderObjectTemplate*>(so_template_.get());
+
+		std::vector<uint8_t> native_shader_block;
+
+		if (ogl_so_template->glsl_srcs_[type])
+		{
+			std::ostringstream oss(std::ios_base::binary | std::ios_base::out);
+
+			uint32_t len32 = Native2LE(static_cast<uint32_t>(ogl_so_template->glsl_srcs_[type]->size()));
+			oss.write(reinterpret_cast<char const *>(&len32), sizeof(len32));
+			oss.write(&(*ogl_so_template->glsl_srcs_[type])[0], ogl_so_template->glsl_srcs_[type]->size());
+
+			uint16_t num16 = Native2LE(static_cast<uint16_t>(ogl_so_template->pnames_[type]->size()));
+			oss.write(reinterpret_cast<char const *>(&num16), sizeof(num16));
+			for (size_t i = 0; i < ogl_so_template->pnames_[type]->size(); ++ i)
+			{
+				uint8_t len8 = static_cast<uint8_t>((*ogl_so_template->pnames_[type])[i].size());
+				oss.write(reinterpret_cast<char const *>(&len8), sizeof(len8));
+				oss.write(&(*ogl_so_template->pnames_[type])[i][0], (*ogl_so_template->pnames_[type])[i].size());
+			}
+
+			num16 = Native2LE(static_cast<uint16_t>(ogl_so_template->glsl_res_names_[type]->size()));
+			oss.write(reinterpret_cast<char const *>(&num16), sizeof(num16));
+			for (size_t i = 0; i < ogl_so_template->glsl_res_names_[type]->size(); ++ i)
+			{
+				uint8_t len8 = static_cast<uint8_t>((*ogl_so_template->glsl_res_names_[type])[i].size());
+				oss.write(reinterpret_cast<char const *>(&len8), sizeof(len8));
+				oss.write(&(*ogl_so_template->glsl_res_names_[type])[i][0], (*ogl_so_template->glsl_res_names_[type])[i].size());
+			}
+
+			std::vector<std::pair<std::string, std::string>> tex_sampler_pairs;
+			for (size_t i = 0; i < gl_tex_sampler_binds_.size(); ++ i)
+			{
+				if (std::get<3>(gl_tex_sampler_binds_[i]) | (1UL << type))
+				{
+					tex_sampler_pairs.emplace_back(std::get<1>(gl_tex_sampler_binds_[i])->Name(),
+						std::get<2>(gl_tex_sampler_binds_[i])->Name());
+				}
+			}
+
+			num16 = Native2LE(static_cast<uint16_t>(tex_sampler_pairs.size()));
+			oss.write(reinterpret_cast<char const *>(&num16), sizeof(num16));
+			for (size_t i = 0; i < num16; ++ i)
+			{
+				uint8_t len8 = static_cast<uint8_t>(tex_sampler_pairs[i].first.size());
+				oss.write(reinterpret_cast<char const *>(&len8), sizeof(len8));
+				oss.write(&tex_sampler_pairs[i].first[0], len8);
+
+				len8 = static_cast<uint8_t>(tex_sampler_pairs[i].second.size());
+				oss.write(reinterpret_cast<char const *>(&len8), sizeof(len8));
+				oss.write(&tex_sampler_pairs[i].second[0], len8);
+			}
+
+			if (ST_VertexShader == type)
+			{
+				uint8_t num8 = static_cast<uint8_t>(ogl_so_template->vs_usages_.size());
+				oss.write(reinterpret_cast<char const *>(&num8), sizeof(num8));
+				for (size_t i = 0; i < ogl_so_template->vs_usages_.size(); ++ i)
+				{
+					uint8_t veu = static_cast<uint8_t>(ogl_so_template->vs_usages_[i]);
+					oss.write(reinterpret_cast<char const *>(&veu), sizeof(veu));
+				}
+
+				num8 = static_cast<uint8_t>(ogl_so_template->vs_usage_indices_.size());
+				oss.write(reinterpret_cast<char const *>(&num8), sizeof(num8));
+				if (!ogl_so_template->vs_usage_indices_.empty())
+				{
+					oss.write(reinterpret_cast<char const *>(&ogl_so_template->vs_usage_indices_[0]),
+						ogl_so_template->vs_usage_indices_.size() * sizeof(ogl_so_template->vs_usage_indices_[0]));
+				}
+
+				num8 = static_cast<uint8_t>(ogl_so_template->glsl_vs_attrib_names_.size());
+				oss.write(reinterpret_cast<char const *>(&num8), sizeof(num8));
+				for (size_t i = 0; i < ogl_so_template->glsl_vs_attrib_names_.size(); ++ i)
+				{
+					uint8_t len8 = static_cast<uint8_t>(ogl_so_template->glsl_vs_attrib_names_[i].size());
+					oss.write(reinterpret_cast<char const *>(&len8), sizeof(len8));
+					oss.write(&ogl_so_template->glsl_vs_attrib_names_[i][0], ogl_so_template->glsl_vs_attrib_names_[i].size());
+				}
+			}
+			else if (ST_GeometryShader == type)
+			{
+				uint32_t git = Native2LE(ogl_so_template->gs_input_type_);
+				oss.write(reinterpret_cast<char const *>(&git), sizeof(git));
+
+				uint32_t got = Native2LE(ogl_so_template->gs_output_type_);
+				oss.write(reinterpret_cast<char const *>(&got), sizeof(got));
+
+				uint32_t gmov = Native2LE(ogl_so_template->gs_max_output_vertex_);
+				oss.write(reinterpret_cast<char const *>(&gmov), sizeof(gmov));
+			}
+
+			std::string out_str = oss.str();
+			native_shader_block.resize(out_str.size());
+			std::memcpy(&native_shader_block[0], &out_str[0], out_str.size());
+		}
+
+		uint32_t len = static_cast<uint32_t>(native_shader_block.size());
+		{
+			uint32_t tmp = Native2LE(len);
+			os.write(reinterpret_cast<char const *>(&tmp), sizeof(tmp));
+		}
+		if (len > 0)
+		{
+			os.write(reinterpret_cast<char const *>(&native_shader_block[0]), len * sizeof(native_shader_block[0]));
+		}
+	}
+
+	void NullShaderObject::OGLAttachShader(ShaderType type, RenderEffect const & effect,
+		RenderTechnique const & tech, RenderPass const & pass, std::array<uint32_t, ST_NumShaderTypes> const & shader_desc_ids)
+	{
+		auto ogl_so_template = checked_cast<OGLShaderObjectTemplate*>(so_template_.get());
+
+		ShaderDesc const & sd = effect.GetShaderDesc(shader_desc_ids[type]);
+
+		ogl_so_template->shader_func_names_[type] = sd.func_name;
+
+		bool has_gs = false;
+		if (!effect.GetShaderDesc(shader_desc_ids[ST_GeometryShader]).func_name.empty())
+		{
+			has_gs = true;
+		}
+		bool has_ps = false;
+		if (!effect.GetShaderDesc(shader_desc_ids[ST_PixelShader]).func_name.empty())
+		{
+			has_ps = true;
+		}
+
+		is_shader_validate_[type] = true;
+		switch (type)
+		{
+		case ST_VertexShader:
+		case ST_PixelShader:
+		case ST_GeometryShader:
+		case ST_HullShader:
+		case ST_DomainShader:
+			break;
+
+		default:
+			is_shader_validate_[type] = false;
+			break;
+		}
+
+		if (is_shader_validate_[type])
+		{
+			auto const & re = *checked_cast<NullRenderEngine*>(&Context::Instance().RenderFactoryInstance().RenderEngineInstance());
+			auto const & caps = re.DeviceCaps();
+
+			int major_version, minor_version;
+			re.GetCustomAttrib("MAJOR_VERSION", &major_version);
+			re.GetCustomAttrib("MINOR_VERSION", &minor_version);
+
+			is_shader_validate_[type] = true;
+
+			char const * shader_profile = sd.profile.c_str();
+			size_t const shader_profile_hash = RT_HASH(shader_profile);
+			switch (type)
+			{
+			case ST_VertexShader:
+				if (CT_HASH("auto") == shader_profile_hash)
+				{
+					shader_profile = "vs_5_0";
+				}
+				break;
+
+			case ST_PixelShader:
+				if (CT_HASH("auto") == shader_profile_hash)
+				{
+					shader_profile = "ps_5_0";
+				}
+				break;
+
+			case ST_GeometryShader:
+				if (caps.gs_support)
+				{
+					if (CT_HASH("auto") == shader_profile_hash)
+					{
+						shader_profile = "gs_5_0";
+					}
+				}
+				else
+				{
+					is_shader_validate_[type] = false;
+				}
+				break;
+
+			case ST_ComputeShader:
+				if (caps.cs_support)
+				{
+					if (CT_HASH("auto") == shader_profile_hash)
+					{
+						shader_profile = "cs_5_0";
+					}
+					if ((CT_HASH("cs_5_0") == shader_profile_hash) && (caps.max_shader_model < ShaderModel(5, 0)))
+					{
+						is_shader_validate_[type] = false;
+					}
+				}
+				else
+				{
+					is_shader_validate_[type] = false;
+				}
+				break;
+
+			case ST_HullShader:
+				if (caps.hs_support)
+				{
+					if (CT_HASH("auto") == shader_profile_hash)
+					{
+						shader_profile = "hs_5_0";
+					}
+				}
+				else
+				{
+					is_shader_validate_[type] = false;
+				}
+				break;
+
+			case ST_DomainShader:
+				if (caps.ds_support)
+				{
+					if (CT_HASH("auto") == shader_profile_hash)
+					{
+						shader_profile = "ds_5_0";
+					}
+				}
+				else
+				{
+					is_shader_validate_[type] = false;
+				}
+				break;
+
+			default:
+				is_shader_validate_[type] = false;
+				break;
+			}
+
+			std::vector<uint8_t> code;
+			if (is_shader_validate_[type])
+			{
+				std::string err_msg;
+				std::vector<std::pair<char const *, char const *>> macros;
+				macros.emplace_back("KLAYGE_DXBC2GLSL", "1");
+				macros.emplace_back("KLAYGE_OPENGL", "1");
+				if (!caps.texture_format_support(EF_BC5) || !caps.texture_format_support(EF_BC5_SRGB))
+				{
+					macros.emplace_back("KLAYGE_BC5_AS_AG", "1");
+				}
+				if (!caps.texture_format_support(EF_BC4) || !caps.texture_format_support(EF_BC4_SRGB))
+				{
+					macros.emplace_back("KLAYGE_BC4_AS_G", "1");
+				}
+				macros.emplace_back("KLAYGE_FRAG_DEPTH", "1");
+
+				uint32_t const flags = D3DCOMPILE_ENABLE_STRICTNESS | D3DCOMPILE_PREFER_FLOW_CONTROL | D3DCOMPILE_SKIP_OPTIMIZATION;
+				code = this->CompileToDXBC(type, effect, tech, pass, macros, sd.func_name.c_str(), shader_profile, flags);
+				if (code.empty())
+				{
+					is_shader_validate_[type] = false;
+				}
+				else
+				{
+					try
+					{
+						GLSLVersion gsv;
+						switch (major_version)
+						{
+						case 4:
+							switch (minor_version)
+							{
+							case 5:
+								gsv = GSV_450;
+								break;
+
+							case 4:
+								gsv = GSV_440;
+								break;
+
+							case 3:
+								gsv = GSV_430;
+								break;
+
+							case 2:
+								gsv = GSV_420;
+								break;
+
+							case 1:
+								gsv = GSV_410;
+								break;
+
+							default:
+								KFL_UNREACHABLE("Invalid OpenGL 4 sub-version");
+							}
+							break;
+
+						default:
+							KFL_UNREACHABLE("Invalid OpenGL version");
+						}
+
+						DXBC2GLSL::DXBC2GLSL dxbc2glsl;
+						uint32_t rules = DXBC2GLSL::DXBC2GLSL::DefaultRules(gsv);
+						rules &= ~GSR_UniformBlockBinding;
+						dxbc2glsl.FeedDXBC(&code[0],
+							has_gs, has_ps, static_cast<ShaderTessellatorPartitioning>(ogl_so_template->ds_partitioning_),
+							static_cast<ShaderTessellatorOutputPrimitive>(ogl_so_template->ds_output_primitive_),
+							gsv, rules);
+						ogl_so_template->glsl_srcs_[type] = MakeSharedPtr<std::string>(dxbc2glsl.GLSLString());
+						ogl_so_template->pnames_[type] = MakeSharedPtr<std::vector<std::string>>();
+						ogl_so_template->glsl_res_names_[type] = MakeSharedPtr<std::vector<std::string>>();
+
+						for (uint32_t i = 0; i < dxbc2glsl.NumCBuffers(); ++i)
+						{
+							for (uint32_t j = 0; j < dxbc2glsl.NumVariables(i); ++j)
+							{
+								if (dxbc2glsl.VariableUsed(i, j))
+								{
+									ogl_so_template->pnames_[type]->push_back(dxbc2glsl.VariableName(i, j));
+									ogl_so_template->glsl_res_names_[type]->push_back(dxbc2glsl.VariableName(i, j));
+								}
+							}
+						}
+
+						std::vector<char const *> tex_names;
+						std::vector<char const *> sampler_names;
+						for (uint32_t i = 0; i < dxbc2glsl.NumResources(); ++i)
+						{
+							if (dxbc2glsl.ResourceUsed(i))
+							{
+								char const * res_name = dxbc2glsl.ResourceName(i);
+
+								if (SIT_TEXTURE == dxbc2glsl.ResourceType(i))
+								{
+									if (SSD_BUFFER == dxbc2glsl.ResourceDimension(i))
+									{
+										ogl_so_template->pnames_[type]->push_back(res_name);
+										ogl_so_template->glsl_res_names_[type]->push_back(res_name);
+									}
+									else
+									{
+										tex_names.push_back(res_name);
+									}
+								}
+								else if (SIT_SAMPLER == dxbc2glsl.ResourceType(i))
+								{
+									sampler_names.push_back(res_name);
+								}
+							}
+						}
+
+						for (size_t i = 0; i < tex_names.size(); ++i)
+						{
+							auto param = effect.ParameterByName(tex_names[i]);
+							for (size_t j = 0; j < sampler_names.size(); ++j)
+							{
+								std::string combined_sampler_name = std::string(tex_names[i]) + "_" + sampler_names[j];
+								bool found = false;
+								for (uint32_t k = 0; k < gl_tex_sampler_binds_.size(); ++k)
+								{
+									if (std::get<0>(gl_tex_sampler_binds_[k]) == combined_sampler_name)
+									{
+										std::get<3>(gl_tex_sampler_binds_[k]) |= 1UL << type;
+										found = true;
+										break;
+									}
+								}
+								if (!found)
+								{
+									gl_tex_sampler_binds_.push_back(std::make_tuple(combined_sampler_name,
+										param, effect.ParameterByName(sampler_names[j]), 1UL << type));
+								}
+
+								ogl_so_template->pnames_[type]->push_back(combined_sampler_name);
+								ogl_so_template->glsl_res_names_[type]->push_back(combined_sampler_name);
+							}
+						}
+
+						if (ST_VertexShader == type)
+						{
+							for (uint32_t i = 0; i < dxbc2glsl.NumInputParams(); ++i)
+							{
+								if (dxbc2glsl.InputParam(i).mask != 0)
+								{
+									std::string semantic = dxbc2glsl.InputParam(i).semantic_name;
+									uint32_t semantic_index = dxbc2glsl.InputParam(i).semantic_index;
+									std::string glsl_param_name = semantic;
+									size_t const semantic_hash = RT_HASH(semantic.c_str());
+
+									if ((CT_HASH("SV_VertexID") != semantic_hash)
+										&& (CT_HASH("SV_InstanceID") != semantic_hash))
+									{
+										VertexElementUsage usage = VEU_Position;
+										uint8_t usage_index = 0;
+										if (CT_HASH("POSITION") == semantic_hash)
+										{
+											usage = VEU_Position;
+											glsl_param_name = "POSITION0";
+										}
+										else if (CT_HASH("NORMAL") == semantic_hash)
+										{
+											usage = VEU_Normal;
+											glsl_param_name = "NORMAL0";
+										}
+										else if (CT_HASH("COLOR") == semantic_hash)
+										{
+											if (0 == semantic_index)
+											{
+												usage = VEU_Diffuse;
+												glsl_param_name = "COLOR0";
+											}
+											else
+											{
+												usage = VEU_Specular;
+												glsl_param_name = "COLOR1";
+											}
+										}
+										else if (CT_HASH("BLENDWEIGHT") == semantic_hash)
+										{
+											usage = VEU_BlendWeight;
+											glsl_param_name = "BLENDWEIGHT0";
+										}
+										else if (CT_HASH("BLENDINDICES") == semantic_hash)
+										{
+											usage = VEU_BlendIndex;
+											glsl_param_name = "BLENDINDICES0";
+										}
+										else if (0 == semantic.find("TEXCOORD"))
+										{
+											usage = VEU_TextureCoord;
+											usage_index = static_cast<uint8_t>(semantic_index);
+											glsl_param_name = "TEXCOORD" + boost::lexical_cast<std::string>(semantic_index);
+										}
+										else if (CT_HASH("TANGENT") == semantic_hash)
+										{
+											usage = VEU_Tangent;
+											glsl_param_name = "TANGENT0";
+										}
+										else if (CT_HASH("BINORMAL") == semantic_hash)
+										{
+											usage = VEU_Binormal;
+											glsl_param_name = "BINORMAL0";
+										}
+										else
+										{
+											KFL_UNREACHABLE("Invalid sementic");
+										}
+
+										ogl_so_template->vs_usages_.push_back(usage);
+										ogl_so_template->vs_usage_indices_.push_back(usage_index);
+										ogl_so_template->glsl_vs_attrib_names_.push_back(glsl_param_name);
+									}
+								}
+							}
+						}
+						else if (ST_GeometryShader == type)
+						{
+							switch (dxbc2glsl.GSInputPrimitive())
+							{
+							case SP_Point:
+								ogl_so_template->gs_input_type_ = GL_POINTS;
+								break;
+
+							case SP_Line:
+								ogl_so_template->gs_input_type_ = GL_LINES;
+								break;
+
+							case SP_LineAdj:
+								ogl_so_template->gs_input_type_ = GL_LINES_ADJACENCY;
+								break;
+
+							case SP_Triangle:
+								ogl_so_template->gs_input_type_ = GL_TRIANGLES;
+								break;
+
+							case SP_TriangleAdj:
+								ogl_so_template->gs_input_type_ = GL_TRIANGLES_ADJACENCY;
+								break;
+
+							default:
+								KFL_UNREACHABLE("Invalid GS input type");
+							}
+
+							switch (dxbc2glsl.GSOutputTopology(0))
+							{
+							case SPT_PointList:
+								ogl_so_template->gs_output_type_ = GL_POINTS;
+								break;
+
+							case SPT_LineStrip:
+								ogl_so_template->gs_output_type_ = GL_LINE_STRIP;
+								break;
+
+							case SPT_TriangleStrip:
+								ogl_so_template->gs_output_type_ = GL_TRIANGLE_STRIP;
+								break;
+
+							default:
+								KFL_UNREACHABLE("Invalid GS output topology");
+							}
+
+							ogl_so_template->gs_max_output_vertex_ = dxbc2glsl.MaxGSOutputVertex();
+						}
+						else if (ST_HullShader == type)
+						{
+							ogl_so_template->ds_partitioning_ = dxbc2glsl.DSPartitioning();
+							ogl_so_template->ds_output_primitive_ = dxbc2glsl.DSOutputPrimitive();
+						}
+					}
+					catch (std::exception& ex)
+					{
+						is_shader_validate_[type] = false;
+
+						LogError("Error(s) in conversion: %s/%s/%s", tech.Name().c_str(), pass.Name().c_str(), sd.func_name.c_str());
+						LogError(ex.what());
+						LogError("Please send this information and your shader to webmaster at klayge.org. We'll fix this ASAP.");
+					}
+				}
+			}
+		}
+	}
+
+	void NullShaderObject::OGLAttachShader(ShaderType type, RenderEffect const & /*effect*/,
+		RenderTechnique const & /*tech*/, RenderPass const & /*pass*/, ShaderObjectPtr const & shared_so)
+	{
+		auto so = checked_cast<NullShaderObject*>(shared_so.get());
+
+		auto ogl_so_template = checked_cast<OGLShaderObjectTemplate*>(so_template_.get());
+		auto ogl_so_so_template = checked_cast<OGLShaderObjectTemplate*>(so->so_template_.get());
+
+		is_shader_validate_[type] = so->is_shader_validate_[type];
+		ogl_so_template->shader_func_names_[type] = ogl_so_so_template->shader_func_names_[type];
+
+		if (is_shader_validate_[type])
+		{
+			ogl_so_template->glsl_srcs_[type] = ogl_so_so_template->glsl_srcs_[type];
+
+			ogl_so_template->pnames_[type] = ogl_so_so_template->pnames_[type];
+			ogl_so_template->glsl_res_names_[type] = ogl_so_so_template->glsl_res_names_[type];
+			if (ST_VertexShader == type)
+			{
+				ogl_so_template->vs_usages_ = ogl_so_so_template->vs_usages_;
+				ogl_so_template->vs_usage_indices_ = ogl_so_so_template->vs_usage_indices_;
+				ogl_so_template->glsl_vs_attrib_names_ = ogl_so_so_template->glsl_vs_attrib_names_;
+			}
+			else if (ST_GeometryShader == type)
+			{
+				ogl_so_template->gs_input_type_ = ogl_so_so_template->gs_input_type_;
+				ogl_so_template->gs_output_type_ = ogl_so_so_template->gs_output_type_;
+				ogl_so_template->gs_max_output_vertex_ = ogl_so_so_template->gs_max_output_vertex_;
+			}
+			else if (ST_HullShader == type)
+			{
+				ogl_so_template->ds_partitioning_ = ogl_so_so_template->ds_partitioning_;
+				ogl_so_template->ds_output_primitive_ = ogl_so_so_template->ds_output_primitive_;
+			}
+
+			for (uint32_t j = 0; j < so->gl_tex_sampler_binds_.size(); ++j)
+			{
+				if (std::get<3>(so->gl_tex_sampler_binds_[j]) | (1UL << type))
+				{
+					std::string const & combined_sampler_name = std::get<0>(so->gl_tex_sampler_binds_[j]);
+					bool found = false;
+					for (uint32_t k = 0; k < gl_tex_sampler_binds_.size(); ++k)
+					{
+						if (std::get<0>(gl_tex_sampler_binds_[k]) == combined_sampler_name)
+						{
+							std::get<3>(gl_tex_sampler_binds_[k]) |= 1UL << type;
+							found = true;
+							break;
+						}
+					}
+					if (!found)
+					{
+						gl_tex_sampler_binds_.push_back(std::make_tuple(combined_sampler_name,
+							std::get<1>(so->gl_tex_sampler_binds_[j]), std::get<2>(so->gl_tex_sampler_binds_[j]), 1UL << type));
+					}
+				}
+			}
+		}
+	}
+
+	void NullShaderObject::OGLLinkShaders(RenderEffect const & effect)
 	{
 		KFL_UNUSED(effect);
-		return MakeSharedPtr<NullShaderObject>();
-	}
 
-	void NullShaderObject::Bind()
-	{
-	}
+		auto ogl_so_template = checked_cast<OGLShaderObjectTemplate*>(so_template_.get());
 
-	void NullShaderObject::Unbind()
-	{
+		is_validate_ = true;
+		for (size_t type = 0; type < ShaderObject::ST_NumShaderTypes; ++type)
+		{
+			if (!ogl_so_template->shader_func_names_[type].empty())
+			{
+				is_validate_ &= is_shader_validate_[type];
+			}
+		}
 	}
 }
